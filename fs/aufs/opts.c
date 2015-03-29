@@ -529,6 +529,13 @@ static int au_opt_simple(struct super_block *sb, struct au_opt *opt,
 		sbinfo->si_rdhash = opt->rdhash;
 		break;
 
+	case Opt_shwh:
+		if (opt->tf)
+			au_opt_set(sbinfo->si_mntflags, SHWH);
+		else
+			au_opt_clr(sbinfo->si_mntflags, SHWH);
+		break;
+
 	case Opt_dirperm1:
 		if (opt->tf)
 			au_opt_set(sbinfo->si_mntflags, DIRPERM1);
@@ -697,6 +704,8 @@ int au_opts_verify(struct super_block *sb, unsigned long sb_flags,
 	if (!(sb_flags & SB_RDONLY)) {
 		if (unlikely(!au_br_writable(au_sbr_perm(sb, 0))))
 			pr_warn("first branch should be rw\n");
+		if (unlikely(au_opt_test(sbinfo->si_mntflags, SHWH)))
+			pr_warn_once("shwh should be used with ro\n");
 	}
 
 	if (au_opt_test((sbinfo->si_mntflags | pending), UDBA_HNOTIFY)

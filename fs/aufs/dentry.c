@@ -107,6 +107,14 @@ out:
 	return h_dentry;
 }
 
+static int au_test_shwh(struct super_block *sb, const struct qstr *name)
+{
+	if (unlikely(!au_opt_test(au_mntflags(sb), SHWH)
+		     && !strncmp(name->name, AUFS_WH_PFX, AUFS_WH_PFX_LEN)))
+		return -EPERM;
+	return 0;
+}
+
 /*
  * returns the number of lower positive dentries,
  * otherwise an error.
@@ -126,6 +134,10 @@ int au_lkup_dentry(struct dentry *dentry, aufs_bindex_t btop,
 	struct super_block *sb;
 
 	sb = dentry->d_sb;
+	err = au_test_shwh(sb, args.name);
+	if (unlikely(err))
+		goto out;
+
 	err = au_wh_name_alloc(&args.whname, args.name);
 	if (unlikely(err))
 		goto out;
