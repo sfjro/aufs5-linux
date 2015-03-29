@@ -76,7 +76,15 @@ loff_t au_dir_size(struct file *file, struct dentry *dentry);
 void au_dir_ts(struct inode *dir, aufs_bindex_t bsrc);
 
 /* vdir.c */
+unsigned int au_rdhash_est(loff_t sz);
+int au_nhash_alloc(struct au_nhash *nhash, unsigned int num_hash, gfp_t gfp);
+void au_nhash_wh_free(struct au_nhash *whlist);
+int au_nhash_test_known_wh(struct au_nhash *whlist, char *name, int nlen);
+int au_nhash_append_wh(struct au_nhash *whlist, char *name, int nlen, ino_t ino,
+		       unsigned int d_type, aufs_bindex_t bindex);
 void au_vdir_free(struct au_vdir *vdir);
+int au_vdir_init(struct file *file);
+int au_vdir_fill_de(struct file *file, struct dir_context *ctx);
 
 #endif /* __KERNEL__ */
 #endif /* __AUFS_DIR_H__ */
