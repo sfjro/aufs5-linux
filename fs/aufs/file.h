@@ -14,6 +14,7 @@
 
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/mm_types.h>
 #include "rwsem.h"
 
 struct au_branch;
@@ -43,8 +44,14 @@ struct au_finfo {
 	aufs_bindex_t		fi_btop;
 
 	/* do not union them */
-	struct au_hfile		fi_htop;	/* for non-dir */
+	struct {				/* for non-dir */
+		struct au_hfile			fi_htop;
+		atomic_t			fi_mmapped;
+		struct hlist_bl_node		fi_mf;
+	};
 	struct au_fidir		*fi_hdir;	/* for dir only */
+
+	struct file		*fi_file;	/* very ugly */
 	struct rcu_head		rcu;
 } ____cacheline_aligned_in_smp;
 
@@ -71,6 +78,16 @@ int au_reval_and_lock_fdi(struct file *file, int (*reopen)(struct file *file),
 extern const struct file_operations aufs_file_fop;
 int au_do_open_nondir(struct file *file, int flags);
 int aufs_release_nondir(struct inode *inode __maybe_unused, struct file *file);
+
+/* mf.c */
+void au_mf_add(struct file *h_file, struct file *file);
+void au_mf_del(struct file *h_file, struct file *file);
+#if IS_MODULE(CONFIG_AUFS_FS)
+const struct path *au_do_file_user_path(const struct file *h_file);
+const struct inode *au_do_file_user_inode(const struct file *h_file);
+#elif IS_BUILTIN(CONFIG_AUFS_FS)
+/* declared in include/linux/fs.h */
+#endif
 
 /* finfo.c */
 void au_hfput(struct au_hfile *hf, int execed);
@@ -215,6 +232,49 @@ static inline unsigned int au_figen(struct file *f)
 {
 	return atomic_read(&au_fi(f)->fi_generation);
 }
+
+static inline void au_set_mmapped(struct file *f)
+{
+	if (atomic_inc_return(&au_fi(f)->fi_mmapped))
+		return;
+	pr_warn("fi_mmapped wrapped around\n");
+	while (!atomic_inc_return(&au_fi(f)->fi_mmapped))
+		;
+}
+
+static inline void au_unset_mmapped(struct file *f)
+{
+	atomic_dec(&au_fi(f)->fi_mmapped);
+}
+
+static inline int au_test_mmapped(struct file *f)
+{
+	return atomic_read(&au_fi(f)->fi_mmapped);
+}
+
+/* customize vma->vm_file */
+#ifdef CONFIG_MMU
+AuStubVoid(AuDbgVmRegion, struct file *file, struct vm_area_struct *vma)
+
+static inline void au_vm_file_reset(struct vm_area_struct *vma,
+				    struct file *file)
+{
+	vma_set_file(vma, file);
+}
+#else
+#define AuDbgVmRegion(file, vma) \
+	AuDebugOn((vma)->vm_region && (vma)->vm_region->vm_file != (file))
+
+static inline void au_vm_file_reset(struct vm_area_struct *vma,
+				    struct file *file)
+{
+	vma_set_file(vma, file);
+
+	get_file(file);
+	swap(vma->vm_region->vm_file, file);
+	fput(file);
+}
+#endif /* CONFIG_MMU */
 
 #endif /* __KERNEL__ */
 #endif /* __AUFS_FILE_H__ */
