@@ -21,6 +21,9 @@ struct vfsmount;
 struct au_hinode {
 	struct inode		*hi_inode;
 	aufs_bindex_t		hi_id;
+
+	/* reference to the copied-up whiteout with get/put */
+	struct dentry		*hi_whdentry;
 };
 
 struct au_iigen {
@@ -128,6 +131,8 @@ void au_unpin(struct au_pin *pin);
 /* iinfo.c */
 struct inode *au_h_iptr(struct inode *inode, aufs_bindex_t bindex);
 void au_hiput(struct au_hinode *hinode);
+void au_set_hi_wh(struct inode *inode, aufs_bindex_t bindex,
+		  struct dentry *h_wh);
 unsigned int au_hi_flags(struct inode *inode, int isdir);
 
 /* hinode flags */
@@ -328,6 +333,12 @@ static inline aufs_bindex_t au_ibbot(struct inode *inode)
 {
 	IiMustAnyLock(inode);
 	return au_ii(inode)->ii_bbot;
+}
+
+static inline struct dentry *au_hi_wh(struct inode *inode, aufs_bindex_t bindex)
+{
+	IiMustAnyLock(inode);
+	return au_hinode(au_ii(inode), bindex)->hi_whdentry;
 }
 
 static inline void au_set_ibtop(struct inode *inode, aufs_bindex_t bindex)

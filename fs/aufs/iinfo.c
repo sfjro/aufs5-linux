@@ -25,6 +25,7 @@ struct inode *au_h_iptr(struct inode *inode, aufs_bindex_t bindex)
 /* todo: hard/soft set? */
 void au_hiput(struct au_hinode *hinode)
 {
+	dput(hinode->hi_whdentry);
 	iput(hinode->hi_inode);
 }
 
@@ -74,6 +75,18 @@ void au_set_h_iptr(struct inode *inode, aufs_bindex_t bindex,
 				AuIOErr1("failed au_xino_write() %d\n", err);
 		}
 	}
+}
+
+void au_set_hi_wh(struct inode *inode, aufs_bindex_t bindex,
+		  struct dentry *h_wh)
+{
+	struct au_hinode *hinode;
+
+	IiMustWriteLock(inode);
+
+	hinode = au_hinode(au_ii(inode), bindex);
+	AuDebugOn(hinode->hi_whdentry);
+	hinode->hi_whdentry = h_wh;
 }
 
 void au_update_iigen(struct inode *inode, int half)
@@ -150,6 +163,7 @@ void au_hinode_init(struct au_hinode *hinode)
 {
 	hinode->hi_inode = NULL;
 	hinode->hi_id = -1;
+	hinode->hi_whdentry = NULL;
 }
 
 int au_iinfo_init(struct inode *inode)
