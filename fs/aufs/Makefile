@@ -12,3 +12,7 @@ obj-$(CONFIG_AUFS_FS) += aufs.o
 aufs-y := module.o super.o \
 	iinfo.o
 # add more later
+
+# all are boolean
+aufs-$(CONFIG_AUFS_DEBUG) += debug.o
+# add more later
