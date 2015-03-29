@@ -81,6 +81,8 @@ static inline void vfsub_inode_nlink_init(struct inode *inode,
 	inode->__i_nlink = nlink;
 }
 
+int vfsub_sync_filesystem(struct super_block *h_sb);
+
 /* ---------------------------------------------------------------------- */
 
 struct file *vfsub_dentry_open(struct path *path, int flags);
