@@ -64,6 +64,10 @@ struct au_sbinfo {
 	 */
 	struct kobject		si_kobj;
 
+#ifdef CONFIG_AUFS_SBILIST
+	struct hlist_node	si_list;
+#endif
+
 	/* dirty, necessary for unmounting, sysfs and sysrq */
 	struct super_block	*si_sb;
 };
@@ -104,6 +108,69 @@ static inline struct au_sbinfo *au_sbi(struct super_block *sb)
 {
 	return sb->s_fs_info;
 }
+
+/* ---------------------------------------------------------------------- */
+
+#ifdef CONFIG_AUFS_SBILIST
+/* module.c */
+extern struct au_rwsem au_sbilist_lock;
+extern struct hlist_head au_sbilist;
+
+static inline void au_sbilist_init(void)
+{
+	au_rw_init(&au_sbilist_lock);
+	INIT_HLIST_HEAD(&au_sbilist);
+}
+
+static inline void au_sbilist_fin(void)
+{
+	AuRwDestroy(&au_sbilist_lock);
+}
+
+static inline void au_sbilist_write_lock(void)
+{
+	au_rw_write_lock(&au_sbilist_lock);
+}
+
+static inline void au_sbilist_write_unlock(void)
+{
+	au_rw_write_unlock(&au_sbilist_lock);
+}
+
+static inline void au_sbilist_read_lock(void)
+{
+	au_rw_read_lock(&au_sbilist_lock);
+}
+
+static inline void au_sbilist_read_unlock(void)
+{
+	au_rw_read_unlock(&au_sbilist_lock);
+}
+
+static inline void au_sbilist_add(struct super_block *sb)
+{
+	au_rw_write_lock(&au_sbilist_lock);
+	hlist_add_head(&au_sbi(sb)->si_list, &au_sbilist);
+	au_rw_write_unlock(&au_sbilist_lock);
+}
+
+static inline void au_sbilist_del(struct super_block *sb)
+{
+	au_rw_write_lock(&au_sbilist_lock);
+	hlist_del(&au_sbi(sb)->si_list);
+	au_rw_write_unlock(&au_sbilist_lock);
+}
+#else
+AuStubVoid(au_sbilist_init, void)
+AuStubVoid(au_sbilist_fin, void)
+AuStubVoid(au_sbilist_write_lock, void)
+AuStubVoid(au_sbilist_write_unlock, void)
+AuStubVoid(au_sbilist_read_lock, void)
+AuStubVoid(au_sbilist_read_unlock, void)
+AuStubVoid(au_sbilist_add, struct super_block *sb)
+AuStubVoid(au_sbilist_del, struct super_block *sb)
+#endif
+#define AuGFP_SBILIST	GFP_NOFS
 
 /* ---------------------------------------------------------------------- */
 
