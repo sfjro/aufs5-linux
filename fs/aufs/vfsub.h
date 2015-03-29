@@ -199,6 +199,12 @@ static inline void vfsub_touch_atime(struct vfsmount *h_mnt,
 }
 #endif
 
+static inline int vfsub_update_time(struct inode *h_inode, int flags)
+{
+	return inode_update_time(h_inode, flags);
+	/* no vfsub_update_h_iattr() since we don't have struct path */
+}
+
 /*
  * re-use branch fs's ioctl(FICLONE) while aufs itself doesn't support such
  * ioctl.
