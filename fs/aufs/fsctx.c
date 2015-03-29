@@ -275,6 +275,12 @@ static void au_fsctx_dump(struct au_opts *opts)
 			AuDbg("udba %d, %s\n",
 				  opt->udba, au_optstr_udba(opt->udba));
 			break;
+		case Opt_diropq_a:
+			AuLabel(diropq_a);
+			break;
+		case Opt_diropq_w:
+			AuLabel(diropq_w);
+			break;
 		case Opt_wsum:
 			AuLabel(wsum);
 			break;
@@ -374,6 +380,9 @@ const struct fs_parameter_spec aufs_fsctx_paramspec[] = {
 #else
 	au_ignore_flag("dirren", Opt_ignore),
 #endif
+
+	/* always | a | whiteouted | w */
+	fsparam_string("diropq", Opt_diropq),
 
 	fsparam_flag_no("warn_perm", Opt_warn_perm),
 
@@ -904,6 +913,24 @@ static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *para
 		opt->rdhash = result.int_32;
 		break;
 
+	case Opt_diropq:
+		/*
+		 * As other options, fs/aufs/opts.c can handle these strings by
+		 * match_token().  But "diropq=" is deprecated now and will
+		 * never have other value.  So simple strcmp() is enough here.
+		 */
+		if (!strcmp(param->string, "a") ||
+		    !strcmp(param->string, "always")) {
+			err = 0;
+			opt->type = Opt_diropq_a;
+		} else if (!strcmp(param->string, "w") ||
+			   !strcmp(param->string, "whiteouted")) {
+			err = 0;
+			opt->type = Opt_diropq_w;
+		} else
+			errorfc(fc, "unknown value %s", param->string);
+		break;
+
 	case Opt_udba:
 		opt->udba = au_udba_val(param->string);
 		if (opt->udba >= 0)
@@ -983,6 +1010,8 @@ static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *para
 	case Opt_br:
 		fallthrough;
 	case Opt_noverbose:
+		fallthrough;
+	case Opt_diropq:
 		break;
 	default:
 		opt->type = token;
