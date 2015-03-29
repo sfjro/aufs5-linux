@@ -31,7 +31,7 @@ int au_do_open_nondir(struct file *file, int flags, struct file *h_file)
 	atomic_set(&finfo->fi_mmapped, 0);
 	bindex = au_dbtop(dentry);
 	if (!h_file)
-		h_file = au_h_open(dentry, bindex, flags, file);
+		h_file = au_h_open(dentry, bindex, flags, file, /*force_wr*/0);
 	else
 		get_file(h_file);
 	if (IS_ERR(h_file))
