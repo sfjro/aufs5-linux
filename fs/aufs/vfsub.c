@@ -107,6 +107,43 @@ out:
 
 /* ---------------------------------------------------------------------- */
 
+int vfsub_create(struct inode *dir, struct path *path, int mode, bool want_excl)
+{
+	int err, e;
+	struct dentry *d;
+	struct inode *inode;
+	struct mnt_idmap *idmap;
+	struct delegated_inode deleg = {};
+
+	IMustLock(dir);
+
+	d = path->dentry;
+	path->dentry = d->d_parent;
+	inode = d_inode(path->dentry);
+	err = security_path_mknod(path, d, mode_strip_umask(inode, mode), 0);
+	path->dentry = d;
+	if (unlikely(err))
+		goto out;
+
+	idmap = mnt_idmap(path->mnt);
+	do {
+		lockdep_off();
+		err = vfs_create(idmap, d, mode, &deleg);
+		lockdep_on();
+		if (is_delegated(&deleg)) {
+			e = break_deleg_wait(&deleg);
+			if (!e)
+				continue;
+		}
+		break;
+	} while (1);
+	if (!err)
+		security_path_post_mknod(idmap, d);
+
+out:
+	return err;
+}
+
 static int au_test_nlink(struct inode *inode)
 {
 	const unsigned int link_max = UINT_MAX >> 1; /* rough margin */
