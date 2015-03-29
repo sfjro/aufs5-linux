@@ -641,7 +641,8 @@ int cpup_entry(struct au_cp_generic *cpg, struct dentry *dst_parent,
 	}
 
 	mnt_flags = au_mntflags(sb);
-	if (!isdir
+	if (!au_opt_test(mnt_flags, UDBA_NONE)
+	    && !isdir
 	    && au_opt_test(mnt_flags, XINO)
 	    && (vfsub_inode_nlink(h_inode, AU_I_BRANCH) == 1
 #if 0 /* re-commit later */
@@ -1201,7 +1202,7 @@ int au_sio_cpup_wh(struct au_cp_generic *cpg, struct file *file)
 
 		pin_orig = cpg->pin;
 		au_pin_init(&wh_pin, dentry, bdst, AuLsc_DI_PARENT,
-			    AuLsc_I_PARENT3, AuPin_DI_LOCKED);
+			    AuLsc_I_PARENT3, cpg->pin->udba, AuPin_DI_LOCKED);
 		cpg->pin = &wh_pin;
 	}
 
@@ -1255,7 +1256,7 @@ int au_cp_dirs(struct dentry *dentry, aufs_bindex_t bdst,
 		goto out;
 
 	au_pin_init(&pin, dentry, bdst, AuLsc_DI_PARENT2, AuLsc_I_PARENT2,
-		    AuPin_MNT_WRITE);
+		    au_opt_udba(dentry->d_sb), AuPin_MNT_WRITE);
 
 	/* do not use au_dpage */
 	real_parent = parent;

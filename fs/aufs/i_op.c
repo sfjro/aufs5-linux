@@ -32,8 +32,8 @@ int au_pin_hdir_lock(struct au_pin *p)
 
 	err = 0;
 	if (p->h_dentry)
-		err = au_h_verify(p->h_dentry, p->hdir->hi_inode, p->h_parent,
-				  p->br);
+		err = au_h_verify(p->h_dentry, p->udba, p->hdir->hi_inode,
+				  p->h_parent, p->br);
 
 out:
 	return err;
@@ -197,9 +197,10 @@ out:
 
 void au_pin_init(struct au_pin *p, struct dentry *dentry,
 		 aufs_bindex_t bindex, int lsc_di, int lsc_hi,
-		 unsigned char flags)
+		 unsigned int udba, unsigned char flags)
 {
 	p->dentry = dentry;
+	p->udba = udba;
 	p->lsc_di = lsc_di;
 	p->lsc_hi = lsc_hi;
 	p->flags = flags;
@@ -216,9 +217,9 @@ void au_pin_init(struct au_pin *p, struct dentry *dentry,
 }
 
 int au_pin(struct au_pin *pin, struct dentry *dentry, aufs_bindex_t bindex,
-	   unsigned char flags)
+	   unsigned int udba, unsigned char flags)
 {
 	au_pin_init(pin, dentry, bindex, AuLsc_DI_PARENT, AuLsc_I_PARENT2,
-		    flags);
+		    udba, flags);
 	return au_do_pin(pin);
 }

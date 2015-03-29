@@ -195,6 +195,26 @@ void au_optstr_br_perm(au_br_perm_str_t *str, int perm)
 
 /* ---------------------------------------------------------------------- */
 
+static match_table_t udbalevel = {
+	{AuOpt_UDBA_REVAL, "reval"},
+	{AuOpt_UDBA_NONE, "none"},
+	{-1, NULL}
+};
+
+int au_udba_val(char *str)
+{
+	substring_t args[MAX_OPT_ARGS];
+
+	return match_token(str, udbalevel, args);
+}
+
+const char *au_optstr_udba(int udba)
+{
+	return au_parser_pattern(udba, udbalevel);
+}
+
+/* ---------------------------------------------------------------------- */
+
 static match_table_t au_wbr_create_policy = {
 	{AuWbrCreate_TDP, "tdp"},
 	{AuWbrCreate_TDP, "top-down-parent"},
@@ -670,4 +690,11 @@ int au_opts_mount(struct super_block *sb, struct au_opts *opts)
 
 out:
 	return err;
+}
+
+/* ---------------------------------------------------------------------- */
+
+unsigned int au_opt_udba(struct super_block *sb)
+{
+	return au_mntflags(sb) & AuOptMask_UDBA;
 }

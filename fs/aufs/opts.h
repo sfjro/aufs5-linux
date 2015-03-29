@@ -34,15 +34,25 @@ enum {
 #define AuOpt_XINO		BIT(0)		/* external inode number bitmap
 						   and translation table */
 #define AuOpt_TRUNC_XINO	BIT(1)		/* truncate xino files */
+#define AuOpt_UDBA_NONE		BIT(2)		/* users direct branch access */
+#define AuOpt_UDBA_REVAL	BIT(3)
 #define AuOpt_PLINK		BIT(6)		/* pseudo-link */
 
 #define AuOpt_Def	(AuOpt_XINO \
+			 | AuOpt_UDBA_REVAL \
 			 | AuOpt_PLINK)
+#define AuOptMask_UDBA	(AuOpt_UDBA_NONE \
+			 | AuOpt_UDBA_REVAL)
 
 #define AuOpt_LkupDirFlags	(LOOKUP_FOLLOW | LOOKUP_DIRECTORY)
 
 #define au_opt_test(flags, name)	(flags & AuOpt_##name)
 #define au_opt_set(flags, name) do { \
+	BUILD_BUG_ON(AuOpt_##name & AuOptMask_UDBA); \
+	((flags) |= AuOpt_##name); \
+} while (0)
+#define au_opt_set_udba(flags, name) do { \
+	(flags) &= ~AuOptMask_UDBA; \
 	((flags) |= AuOpt_##name); \
 } while (0)
 #define au_opt_clr(flags, name) do { \
@@ -146,6 +156,8 @@ struct au_opts {
 /* opts.c */
 int au_br_perm_val(char *perm);
 void au_optstr_br_perm(au_br_perm_str_t *str, int perm);
+int au_udba_val(char *str);
+const char *au_optstr_udba(int udba);
 int au_wbr_create_val(char *str, struct au_opt_wbr_create *create);
 const char *au_optstr_wbr_create(int wbr_create);
 int au_wbr_copyup_val(char *str);
@@ -157,6 +169,8 @@ struct super_block;
 int au_opts_verify(struct super_block *sb, unsigned long sb_flags,
 		   unsigned int pending);
 int au_opts_mount(struct super_block *sb, struct au_opts *opts);
+
+unsigned int au_opt_udba(struct super_block *sb);
 
 /* fsctx.c */
 int aufs_fsctx_init(struct fs_context *fc);

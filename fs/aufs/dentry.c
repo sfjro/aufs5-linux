@@ -177,7 +177,8 @@ int au_lkup_dentry(struct dentry *dentry, aufs_bindex_t btop,
 		au_update_dbtop(dentry);
 	}
 	err = npositive;
-	if (unlikely(au_dbtop(dentry) < 0)) {
+	if (unlikely(!au_opt_test(au_mntflags(sb), UDBA_NONE)
+		     && au_dbtop(dentry) < 0)) {
 		err = -EIO;
 		AuIOErr("both of real entry and whiteout found, %pd, err %d\n",
 			dentry, err);
@@ -340,16 +341,17 @@ out:
 	return err;
 }
 
-int au_h_verify(struct dentry *h_dentry, struct inode *h_dir,
+int au_h_verify(struct dentry *h_dentry, unsigned int udba, struct inode *h_dir,
 		struct dentry *h_parent, struct au_branch *br)
 {
 	int err;
 
 	err = 0;
-	if (!au_test_fs_remote(h_dentry->d_sb)) {
+	if (udba == AuOpt_UDBA_REVAL
+	    && !au_test_fs_remote(h_dentry->d_sb)) {
 		IMustLock(h_dir);
 		err = (d_inode(h_dentry->d_parent) != h_dir);
-	} else
+	} else if (udba != AuOpt_UDBA_NONE)
 		err = au_h_verify_dentry(h_dentry, h_parent, br);
 
 	return err;

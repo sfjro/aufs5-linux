@@ -61,6 +61,7 @@ struct au_icntnr {
 struct au_pin {
 	/* input */
 	struct dentry *dentry;
+	unsigned int udba;
 	unsigned char lsc_di, lsc_hi, flags;
 	aufs_bindex_t bindex;
 
@@ -122,9 +123,9 @@ int au_test_h_perm_sio(struct mnt_idmap *h_idmap, struct inode *h_inode,
 struct dentry *au_pinned_h_parent(struct au_pin *pin);
 void au_pin_init(struct au_pin *pin, struct dentry *dentry,
 		 aufs_bindex_t bindex, int lsc_di, int lsc_hi,
-		 unsigned char flags);
+		 unsigned int udba, unsigned char flags);
 int au_pin(struct au_pin *pin, struct dentry *dentry, aufs_bindex_t bindex,
-	   unsigned char flags) __must_check;
+	   unsigned int udba, unsigned char flags) __must_check;
 int au_do_pin(struct au_pin *pin) __must_check;
 void au_unpin(struct au_pin *pin);
 
