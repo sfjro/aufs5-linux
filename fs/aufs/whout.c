@@ -12,6 +12,13 @@
 #define WH_MASK			0444
 
 /*
+ * If a directory contains this file, then it is opaque.  We start with the
+ * .wh. flag so that it is blocked by lookup.
+ */
+static struct qstr diropq_name = QSTR_INIT(AUFS_WH_DIROPQ,
+					   sizeof(AUFS_WH_DIROPQ) - 1);
+
+/*
  * generate whiteout name, which is NOT terminated by NULL.
  * @name: original d_name.name
  * @len: original d_name.len
@@ -80,6 +87,20 @@ int au_wh_test(struct mnt_idmap *h_idmap, struct path *h_ppath,
 out_wh:
 	dput(wh_dentry);
 out:
+	return err;
+}
+
+/*
+ * test if the @h_path->dentry sets opaque or not.
+ */
+int au_diropq_test(struct mnt_idmap *h_idmap, struct path *h_path)
+{
+	int err;
+	struct inode *h_dir;
+
+	h_dir = d_inode(h_path->dentry);
+	err = au_wh_test(h_idmap, h_path, &diropq_name,
+			 au_test_h_perm_sio(h_idmap, h_dir, MAY_EXEC));
 	return err;
 }
 
@@ -549,6 +570,88 @@ static int link_or_create_wh(struct super_block *sb, aufs_bindex_t bindex,
 out:
 	wbr_wh_read_unlock(wbr);
 	return err;
+}
+
+/* ---------------------------------------------------------------------- */
+
+/*
+ * create or remove the diropq.
+ */
+static struct dentry *do_diropq(struct dentry *dentry, aufs_bindex_t bindex,
+				unsigned int flags)
+{
+	struct dentry *opq_dentry;
+	struct super_block *sb;
+	struct au_branch *br;
+	struct path h_path;
+	int err;
+
+	sb = dentry->d_sb;
+	br = au_sbr(sb, bindex);
+	h_path.dentry = au_h_dptr(dentry, bindex);
+	h_path.mnt = au_br_mnt(br);
+	opq_dentry = vfsub_lkup_one(&diropq_name, &h_path);
+	if (IS_ERR(opq_dentry))
+		goto out;
+
+	if (au_ftest_diropq(flags, CREATE)) {
+		err = link_or_create_wh(sb, bindex, opq_dentry);
+		if (!err) {
+			au_set_dbdiropq(dentry, bindex);
+			goto out; /* success */
+		}
+	} else {
+		h_path.dentry = opq_dentry;
+		err = do_unlink_wh(au_h_iptr(d_inode(dentry), bindex), &h_path);
+		if (!err)
+			au_set_dbdiropq(dentry, -1);
+	}
+	dput(opq_dentry);
+	opq_dentry = ERR_PTR(err);
+
+out:
+	return opq_dentry;
+}
+
+struct do_diropq_args {
+	struct dentry **errp;
+	struct dentry *dentry;
+	aufs_bindex_t bindex;
+	unsigned int flags;
+};
+
+static void call_do_diropq(void *args)
+{
+	struct do_diropq_args *a = args;
+	*a->errp = do_diropq(a->dentry, a->bindex, a->flags);
+}
+
+struct dentry *au_diropq_sio(struct dentry *dentry, aufs_bindex_t bindex,
+			     unsigned int flags)
+{
+	struct dentry *diropq, *h_dentry;
+	struct mnt_idmap *h_idmap;
+
+	h_idmap = au_sbr_idmap(dentry->d_sb, bindex);
+	h_dentry = au_h_dptr(dentry, bindex);
+	if (!au_test_h_perm_sio(h_idmap, d_inode(h_dentry),
+				MAY_EXEC | MAY_WRITE))
+		diropq = do_diropq(dentry, bindex, flags);
+	else {
+		int wkq_err;
+		struct do_diropq_args args = {
+			.errp		= &diropq,
+			.dentry		= dentry,
+			.bindex		= bindex,
+			.flags		= flags
+		};
+
+		wkq_err = au_wkq_wait(call_do_diropq, &args);
+		if (unlikely(wkq_err))
+			diropq = ERR_PTR(wkq_err);
+	}
+
+	return diropq;
 }
 
 /* ---------------------------------------------------------------------- */
