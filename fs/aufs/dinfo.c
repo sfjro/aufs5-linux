@@ -67,9 +67,11 @@ int au_di_init(struct dentry *dentry)
 	err = 0;
 	sb = dentry->d_sb;
 	dinfo = au_di_alloc(sb, AuLsc_DI_CHILD);
-	if (dinfo)
+	if (dinfo) {
+		atomic_set(&dinfo->di_generation, au_sigen(sb));
+		/* smp_mb(); */ /* atomic_set */
 		dentry->d_fsdata = dinfo;
-	else
+	} else
 		err = -ENOMEM;
 
 	return err;
@@ -221,6 +223,24 @@ void au_set_h_dptr(struct dentry *dentry, aufs_bindex_t bindex,
 	hd = au_hdentry(dinfo, bindex);
 	au_hdput(hd);
 	hd->hd_dentry = h_dentry;
+}
+
+int au_digen_test(struct dentry *dentry, unsigned int sigen)
+{
+	int err;
+
+	err = 0;
+	if (unlikely(au_digen(dentry) != sigen
+		     || au_iigen_test(d_inode(dentry), sigen)))
+		err = -EIO;
+
+	return err;
+}
+
+void au_update_digen(struct dentry *dentry)
+{
+	atomic_set(&au_di(dentry)->di_generation, au_sigen(dentry->d_sb));
+	/* smp_mb(); */ /* atomic_set */
 }
 
 void au_update_dbtop(struct dentry *dentry)

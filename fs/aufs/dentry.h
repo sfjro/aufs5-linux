@@ -20,6 +20,8 @@ struct au_hdentry {
 };
 
 struct au_dinfo {
+	atomic_t		di_generation;
+
 	struct au_rwsem		di_rwsem;
 	aufs_bindex_t		di_btop, di_bbot;
 	struct au_hdentry	*di_hdentry;
@@ -45,6 +47,8 @@ struct dentry *au_h_dptr(struct dentry *dentry, aufs_bindex_t bindex);
 
 void au_set_h_dptr(struct dentry *dentry, aufs_bindex_t bindex,
 		   struct dentry *h_dentry);
+int au_digen_test(struct dentry *dentry, unsigned int sigen);
+void au_update_digen(struct dentry *dentry);
 void au_update_dbtop(struct dentry *dentry);
 void au_update_dbbot(struct dentry *dentry);
 
@@ -104,6 +108,12 @@ AuRWLockFuncs(parent3, PARENT3);
 #define DiMustWriteLock(d)	AuRwMustWriteLock(&au_di(d)->di_rwsem)
 
 /* ---------------------------------------------------------------------- */
+
+/* todo: memory barrier? */
+static inline unsigned int au_digen(struct dentry *d)
+{
+	return atomic_read(&au_di(d)->di_generation);
+}
 
 static inline void au_h_dentry_init(struct au_hdentry *hdentry)
 {

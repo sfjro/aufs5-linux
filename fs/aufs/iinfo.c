@@ -48,8 +48,23 @@ void au_set_h_iptr(struct inode *inode, aufs_bindex_t bindex,
 		AuDebugOn(inode->i_mode
 			  && (h_inode->i_mode & S_IFMT)
 			  != (inode->i_mode & S_IFMT));
-		/* add more later */
+		if (bindex == iinfo->ii_btop)
+			au_cpup_igen(inode, h_inode);
 	}
+}
+
+void au_update_iigen(struct inode *inode, int half)
+{
+	struct au_iinfo *iinfo;
+	struct au_iigen *iigen;
+	unsigned int sigen;
+
+	sigen = au_sigen(inode->i_sb);
+	iinfo = au_ii(inode);
+	iigen = &iinfo->ii_generation;
+	spin_lock(&iigen->ig_spin);
+	iigen->ig_generation = sigen;
+	spin_unlock(&iigen->ig_spin);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -59,6 +74,7 @@ void au_icntnr_init_once(void *_c)
 	struct au_icntnr *c = _c;
 	struct au_iinfo *iinfo = &c->iinfo;
 
+	spin_lock_init(&iinfo->ii_generation.ig_spin);
 	au_rw_init(&iinfo->ii_rwsem);
 	inode_init_once(&c->vfs_inode);
 	spin_lock_init(&c->nlink_spin);
@@ -85,6 +101,7 @@ int au_iinfo_init(struct inode *inode)
 		for (i = 0; i < nbr; i++, hi++)
 			au_hinode_init(hi);
 
+		iinfo->ii_generation.ig_generation = au_sigen(sb);
 		iinfo->ii_btop = -1;
 		iinfo->ii_bbot = -1;
 		return 0;

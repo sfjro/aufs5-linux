@@ -22,6 +22,7 @@
 
 #include "debug.h"
 
+#include "cpup.h"
 #include "dcsub.h"
 #include "dentry.h"
 #include "fstype.h"

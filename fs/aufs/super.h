@@ -25,6 +25,8 @@ struct au_sbinfo {
 	struct au_rwsem		si_rwsem;
 
 	/* branch management */
+	unsigned int		si_generation;
+
 	aufs_bindex_t		si_bbot;
 	struct au_branch	**si_branch;
 
@@ -58,6 +60,8 @@ extern const struct super_operations aufs_sop;
 /* sbinfo.c */
 void au_si_free(struct kobject *kobj);
 struct au_sbinfo *au_si_alloc(struct super_block *sb);
+
+unsigned int au_sigen_inc(struct super_block *sb);
 
 /* ---------------------------------------------------------------------- */
 
@@ -94,6 +98,12 @@ static inline aufs_bindex_t au_sbbot(struct super_block *sb)
 {
 	SiMustAnyLock(sb);
 	return au_sbi(sb)->si_bbot;
+}
+
+static inline unsigned int au_sigen(struct super_block *sb)
+{
+	SiMustAnyLock(sb);
+	return au_sbi(sb)->si_generation;
 }
 
 #endif /* __KERNEL__ */

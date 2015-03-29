@@ -20,9 +20,18 @@ struct au_hinode {
 	struct inode		*hi_inode;
 };
 
+struct au_iigen {
+	spinlock_t	ig_spin;
+	__u32		ig_generation;
+};
+
 struct au_iinfo {
+	struct au_iigen		ii_generation;
+	struct super_block	*ii_hsb1;	/* no get/put */
+
 	struct au_rwsem		ii_rwsem;
 	aufs_bindex_t		ii_btop, ii_bbot;
+	__u32			ii_higen;
 	struct au_hinode	*ii_hinode;
 };
 
@@ -67,6 +76,8 @@ void au_hiput(struct au_hinode *hinode);
 
 void au_set_h_iptr(struct inode *inode, aufs_bindex_t bindex,
 		   struct inode *h_inode, unsigned int flags);
+
+void au_update_iigen(struct inode *inode, int half);
 
 void au_icntnr_init_once(void *_c);
 void au_hinode_init(struct au_hinode *hinode);
@@ -138,6 +149,56 @@ static inline void au_icntnr_init(struct au_icntnr *c)
 #ifdef CONFIG_AUFS_DEBUG
 	c->vfs_inode.i_mode = 0;
 #endif
+}
+
+static inline unsigned int au_iigen(struct inode *inode)
+{
+	unsigned int gen;
+	struct au_iinfo *iinfo;
+	struct au_iigen *iigen;
+
+	iinfo = au_ii(inode);
+	iigen = &iinfo->ii_generation;
+	spin_lock(&iigen->ig_spin);
+	gen = iigen->ig_generation;
+	spin_unlock(&iigen->ig_spin);
+
+	return gen;
+}
+
+/* tiny test for inode number */
+/* tmpfs generation is too rough */
+static inline int au_test_higen(struct inode *inode, struct inode *h_inode)
+{
+	struct au_iinfo *iinfo;
+
+	iinfo = au_ii(inode);
+	AuRwMustAnyLock(&iinfo->ii_rwsem);
+	return !(iinfo->ii_hsb1 == h_inode->i_sb
+		 && iinfo->ii_higen == h_inode->i_generation);
+}
+
+static inline void au_iigen_dec(struct inode *inode)
+{
+	struct au_iinfo *iinfo;
+	struct au_iigen *iigen;
+
+	iinfo = au_ii(inode);
+	iigen = &iinfo->ii_generation;
+	spin_lock(&iigen->ig_spin);
+	iigen->ig_generation--;
+	spin_unlock(&iigen->ig_spin);
+}
+
+static inline int au_iigen_test(struct inode *inode, unsigned int sigen)
+{
+	int err;
+
+	err = 0;
+	if (unlikely(inode && au_iigen(inode) != sigen))
+		err = -EIO;
+
+	return err;
 }
 
 /* ---------------------------------------------------------------------- */
