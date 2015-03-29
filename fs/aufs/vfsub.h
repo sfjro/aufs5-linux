@@ -81,6 +81,13 @@ static inline void vfsub_inode_nlink_init(struct inode *inode,
 	inode->__i_nlink = nlink;
 }
 
+static inline void vfsub_dead_dir(struct inode *inode)
+{
+	AuDebugOn(!S_ISDIR(inode->i_mode));
+	inode->i_flags |= S_DEAD;
+	vfsub_clear_nlink(inode);
+}
+
 int vfsub_sync_filesystem(struct super_block *h_sb);
 
 /* ---------------------------------------------------------------------- */

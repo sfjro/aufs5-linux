@@ -187,3 +187,211 @@ void au_dir_ts(struct inode *dir, aufs_bindex_t bindex)
 out:
 	dput(dentry);
 }
+
+/* ---------------------------------------------------------------------- */
+
+#define AuTestEmpty_WHONLY	BIT(0)
+#define AuTestEmpty_CALLED	BIT(1)
+#define au_ftest_testempty(flags, name)	((flags) & AuTestEmpty_##name)
+#define au_fset_testempty(flags, name) \
+	do { (flags) |= AuTestEmpty_##name; } while (0)
+#define au_fclr_testempty(flags, name) \
+	do { (flags) &= ~AuTestEmpty_##name; } while (0)
+
+struct test_empty_arg {
+	struct dir_context ctx;
+	struct au_nhash *whlist;
+	unsigned int flags;
+	int err;
+	aufs_bindex_t bindex;
+};
+
+static bool test_empty_cb(struct dir_context *ctx, const char *__name,
+			  int namelen, loff_t offset __maybe_unused, u64 ino,
+			  unsigned int d_type)
+{
+	struct test_empty_arg *arg = container_of(ctx, struct test_empty_arg,
+						  ctx);
+	char *name = (void *)__name;
+
+	arg->err = 0;
+	au_fset_testempty(arg->flags, CALLED);
+	/* smp_mb(); */
+	if (is_dot_dotdot(name, namelen))
+		goto out; /* success */
+
+	if (namelen <= AUFS_WH_PFX_LEN
+	    || memcmp(name, AUFS_WH_PFX, AUFS_WH_PFX_LEN)) {
+		if (au_ftest_testempty(arg->flags, WHONLY)
+		    && !au_nhash_test_known_wh(arg->whlist, name, namelen))
+			arg->err = -ENOTEMPTY;
+		goto out;
+	}
+
+	name += AUFS_WH_PFX_LEN;
+	namelen -= AUFS_WH_PFX_LEN;
+	if (!au_nhash_test_known_wh(arg->whlist, name, namelen))
+		arg->err = au_nhash_append_wh
+			(arg->whlist, name, namelen, ino, d_type, arg->bindex);
+
+out:
+	/* smp_mb(); */
+	AuTraceErr(arg->err);
+	return !arg->err;
+}
+
+static int do_test_empty(struct dentry *dentry, struct test_empty_arg *arg)
+{
+	int err;
+	struct file *h_file;
+	struct au_branch *br;
+
+	h_file = au_h_open(dentry, arg->bindex,
+			   O_RDONLY | O_NONBLOCK | O_DIRECTORY | O_LARGEFILE,
+			   /*file*/NULL);
+	err = PTR_ERR(h_file);
+	if (IS_ERR(h_file))
+		goto out;
+
+	err = 0;
+	if (!au_opt_test(au_mntflags(dentry->d_sb), UDBA_NONE)
+	    && !vfsub_inode_nlink(file_inode(h_file), AU_I_BRANCH))
+		goto out_put;
+
+	do {
+		arg->err = 0;
+		au_fclr_testempty(arg->flags, CALLED);
+		/* smp_mb(); */
+		err = vfsub_iterate_dir(h_file, &arg->ctx);
+		if (err >= 0)
+			err = arg->err;
+	} while (!err && au_ftest_testempty(arg->flags, CALLED));
+
+out_put:
+	fput(h_file);
+	br = au_sbr(dentry->d_sb, arg->bindex);
+	au_lcnt_dec(&br->br_nfiles);
+out:
+	return err;
+}
+
+struct do_test_empty_args {
+	int *errp;
+	struct dentry *dentry;
+	struct test_empty_arg *arg;
+};
+
+static void call_do_test_empty(void *args)
+{
+	struct do_test_empty_args *a = args;
+	*a->errp = do_test_empty(a->dentry, a->arg);
+}
+
+static int sio_test_empty(struct dentry *dentry, struct test_empty_arg *arg)
+{
+	int err, wkq_err;
+	struct dentry *h_dentry;
+	struct inode *h_inode;
+	struct mnt_idmap *h_idmap;
+
+	h_idmap = au_sbr_idmap(dentry->d_sb, arg->bindex);
+	h_dentry = au_h_dptr(dentry, arg->bindex);
+	h_inode = d_inode(h_dentry);
+	/* todo: i_mode changes anytime? */
+	inode_lock_shared_nested(h_inode, AuLsc_I_CHILD);
+	err = au_test_h_perm_sio(h_idmap, h_inode, MAY_EXEC | MAY_READ);
+	inode_unlock_shared(h_inode);
+	if (!err)
+		err = do_test_empty(dentry, arg);
+	else {
+		struct do_test_empty_args args = {
+			.errp	= &err,
+			.dentry	= dentry,
+			.arg	= arg
+		};
+		unsigned int flags = arg->flags;
+
+		wkq_err = au_wkq_wait(call_do_test_empty, &args);
+		if (unlikely(wkq_err))
+			err = wkq_err;
+		arg->flags = flags;
+	}
+
+	return err;
+}
+
+int au_test_empty_lower(struct dentry *dentry)
+{
+	int err;
+	unsigned int rdhash;
+	aufs_bindex_t bindex, btop, btail;
+	struct au_nhash whlist;
+	struct test_empty_arg arg = {
+		.ctx = {
+			.actor = test_empty_cb
+		}
+	};
+	int (*test_empty)(struct dentry *dentry, struct test_empty_arg *arg);
+
+	SiMustAnyLock(dentry->d_sb);
+
+	rdhash = au_sbi(dentry->d_sb)->si_rdhash;
+	if (!rdhash)
+		rdhash = au_rdhash_est(au_dir_size(/*file*/NULL, dentry));
+	err = au_nhash_alloc(&whlist, rdhash, GFP_NOFS);
+	if (unlikely(err))
+		goto out;
+
+	arg.flags = 0;
+	arg.whlist = &whlist;
+	btop = au_dbtop(dentry);
+	test_empty = do_test_empty;
+	arg.bindex = btop;
+	err = test_empty(dentry, &arg);
+	if (unlikely(err))
+		goto out_whlist;
+
+	au_fset_testempty(arg.flags, WHONLY);
+	btail = au_dbtaildir(dentry);
+	for (bindex = btop + 1; !err && bindex <= btail; bindex++) {
+		struct dentry *h_dentry;
+
+		h_dentry = au_h_dptr(dentry, bindex);
+		if (h_dentry && d_is_positive(h_dentry)) {
+			arg.bindex = bindex;
+			err = test_empty(dentry, &arg);
+		}
+	}
+
+out_whlist:
+	au_nhash_wh_free(&whlist);
+out:
+	return err;
+}
+
+int au_test_empty(struct dentry *dentry, struct au_nhash *whlist)
+{
+	int err;
+	struct test_empty_arg arg = {
+		.ctx = {
+			.actor = test_empty_cb
+		}
+	};
+	aufs_bindex_t bindex, btail;
+
+	err = 0;
+	arg.whlist = whlist;
+	arg.flags = AuTestEmpty_WHONLY;
+	btail = au_dbtaildir(dentry);
+	for (bindex = au_dbtop(dentry); !err && bindex <= btail; bindex++) {
+		struct dentry *h_dentry;
+
+		h_dentry = au_h_dptr(dentry, bindex);
+		if (h_dentry && d_is_positive(h_dentry)) {
+			arg.bindex = bindex;
+			err = sio_test_empty(dentry, &arg);
+		}
+	}
+
+	return err;
+}
