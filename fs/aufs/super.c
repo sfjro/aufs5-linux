@@ -275,6 +275,7 @@ static int aufs_show_options(struct seq_file *m, struct dentry *dentry)
 	AuBool(DIRREN, dirren);
 	AuBool(SUM, sum);
 	/* AuBool(SUM_W, wsum); */
+	AuBool(WARN_PERM, warn_perm);
 	AuBool(VERBOSE, verbose);
 
 out:

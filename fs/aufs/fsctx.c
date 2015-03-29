@@ -250,6 +250,7 @@ static void au_fsctx_dump(struct au_opts *opts)
 		au_fsctx_TF(dirperm1);
 		au_fsctx_TF(plink);
 		au_fsctx_TF(dio);
+		au_fsctx_TF(warn_perm);
 		au_fsctx_TF(verbose);
 		au_fsctx_TF(sum);
 		au_fsctx_TF(dirren);
@@ -372,6 +373,8 @@ const struct fs_parameter_spec aufs_fsctx_paramspec[] = {
 #else
 	au_ignore_flag("dirren", Opt_ignore),
 #endif
+
+	fsparam_flag_no("warn_perm", Opt_warn_perm),
 
 	fsparam_flag_no("dirperm1", Opt_dirperm1),
 
@@ -930,6 +933,7 @@ static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *para
 	au_fsctx_TF(dirperm1);
 	au_fsctx_TF(plink);
 	au_fsctx_TF(dio);
+	au_fsctx_TF(warn_perm);
 	au_fsctx_TF(verbose);
 	au_fsctx_TF(sum);
 	au_fsctx_TF(dirren);

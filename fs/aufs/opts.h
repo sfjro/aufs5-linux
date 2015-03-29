@@ -28,6 +28,7 @@ enum {
 	Opt_plink, Opt_list_plink,
 	Opt_udba,
 	Opt_dio,
+	Opt_warn_perm,
 	Opt_wbr_copyup, Opt_wbr_create,
 	Opt_verbose, Opt_noverbose,
 	Opt_sum, Opt_wsum,
@@ -51,6 +52,7 @@ enum {
 						   bits */
 #define AuOpt_SUM		BIT(9)		/* summation for statfs(2) */
 #define AuOpt_SUM_W		BIT(10)		/* unimplemented */
+#define AuOpt_WARN_PERM		BIT(11)		/* warn when add-branch */
 #define AuOpt_VERBOSE		BIT(12)		/* print the cause of error */
 #define AuOpt_DIO		BIT(13)		/* direct io */
 #define AuOpt_DIRREN		BIT(14)		/* directory rename */
@@ -68,6 +70,7 @@ enum {
 			 | AuOpt_UDBA_REVAL \
 			 | AuOpt_PLINK \
 			 /* | AuOpt_DIRPERM1 */ \
+			 | AuOpt_WARN_PERM \
 			 | AuOpt_DIO)
 #define AuOptMask_UDBA	(AuOpt_UDBA_NONE \
 			 | AuOpt_UDBA_REVAL \

@@ -479,6 +479,13 @@ static int au_opt_simple(struct super_block *sb, struct au_opt *opt,
 			pr_warn_once("ignored nodio\n");
 		break;
 
+	case Opt_warn_perm:
+		if (opt->tf)
+			au_opt_set(sbinfo->si_mntflags, WARN_PERM);
+		else
+			au_opt_clr(sbinfo->si_mntflags, WARN_PERM);
+		break;
+
 	case Opt_verbose:
 		if (opt->tf)
 			au_opt_set(sbinfo->si_mntflags, VERBOSE);
