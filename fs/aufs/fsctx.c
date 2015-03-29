@@ -79,6 +79,28 @@ static void au_fsctx_dump(struct au_opts *opts)
 			u.create = &opt->wbr_create;
 			AuDbg("create %d, %s\n", u.create->wbr_create,
 				  au_optstr_wbr_create(u.create->wbr_create));
+			switch (u.create->wbr_create) {
+			case AuWbrCreate_MFSV:
+				fallthrough;
+			case AuWbrCreate_PMFSV:
+				AuDbg("%d sec\n", u.create->mfs_second);
+				break;
+			case AuWbrCreate_MFSRR:
+				fallthrough;
+			case AuWbrCreate_TDMFS:
+				AuDbg("%llu watermark\n",
+					  u.create->mfsrr_watermark);
+				break;
+			case AuWbrCreate_MFSRRV:
+				fallthrough;
+			case AuWbrCreate_TDMFSV:
+				fallthrough;
+			case AuWbrCreate_PMFSRRV:
+				AuDbg("%llu watermark, %d sec\n",
+					  u.create->mfsrr_watermark,
+					  u.create->mfs_second);
+				break;
+			}
 			break;
 		case Opt_wbr_copyup:
 			AuDbg("copyup %d, %s\n", opt->wbr_copyup,

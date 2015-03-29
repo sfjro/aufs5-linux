@@ -35,6 +35,16 @@ struct au_wbr_create_operations {
 	int (*fin)(struct super_block *sb);
 };
 
+struct au_wbr_mfs {
+	struct mutex	mfs_lock; /* protect this structure */
+	unsigned long	mfs_jiffy;
+	unsigned long	mfs_expire;
+	aufs_bindex_t	mfs_bindex;
+
+	unsigned long long	mfsrr_bytes;
+	unsigned long long	mfsrr_watermark;
+};
+
 #define AuPlink_NHASH 100
 static inline int au_plink_hash(ino_t ino)
 {
@@ -67,6 +77,12 @@ struct au_sbinfo {
 	unsigned char		si_wbr_create;
 	struct au_wbr_copyup_operations *si_wbr_copyup_ops;
 	struct au_wbr_create_operations *si_wbr_create_ops;
+
+	/* round robin */
+	atomic_t		si_wbr_rr_next;
+
+	/* most free space */
+	struct au_wbr_mfs	si_wbr_mfs;
 
 	/* mount flags */
 	/* include/asm-ia64/siginfo.h defines a macro named si_flags */

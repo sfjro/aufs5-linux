@@ -74,6 +74,8 @@ typedef int16_t aufs_bindex_t;
 #define AUFS_XINO_DEF_SEC	30 /* seconds */
 #define AUFS_XINO_DEF_TRUNC	45 /* percentage */
 #define AUFS_WKQ_NAME		AUFS_NAME "d"
+#define AUFS_MFS_DEF_SEC	30 /* seconds */
+#define AUFS_MFS_MAX_SEC	3600 /* seconds */
 #define AUFS_PLINK_WARN		50 /* number of plinks in a single bucket */
 
 /* pseudo-link maintenace under /proc */

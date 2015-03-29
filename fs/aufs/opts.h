@@ -63,14 +63,25 @@ static inline unsigned int au_opts_plink(unsigned int mntflags)
 /* policies to select one among multiple writable branches */
 enum {
 	AuWbrCreate_TDP,	/* top down parent */
-	/* add more later */
+	AuWbrCreate_RR,		/* round robin */
+	AuWbrCreate_MFS,	/* most free space */
+	AuWbrCreate_MFSV,	/* mfs with seconds */
+	AuWbrCreate_MFSRR,	/* mfs then rr */
+	AuWbrCreate_MFSRRV,	/* mfs then rr with seconds */
+	AuWbrCreate_TDMFS,	/* top down regardless parent and mfs */
+	AuWbrCreate_TDMFSV,	/* top down regardless parent and mfs */
+	AuWbrCreate_PMFS,	/* parent and mfs */
+	AuWbrCreate_PMFSV,	/* parent and mfs with seconds */
+	AuWbrCreate_PMFSRR,	/* parent, mfs and round-robin */
+	AuWbrCreate_PMFSRRV,	/* plus seconds */
 
 	AuWbrCreate_Def = AuWbrCreate_TDP
 };
 
 enum {
 	AuWbrCopyup_TDP,	/* top down parent */
-	/* add more later */
+	AuWbrCopyup_BUP,	/* bottom up parent */
+	AuWbrCopyup_BU,		/* bottom up */
 
 	AuWbrCopyup_Def = AuWbrCopyup_TDP
 };
@@ -97,7 +108,8 @@ struct au_opt_xino_itrunc {
 
 struct au_opt_wbr_create {
 	int			wbr_create;
-	/* add more later */
+	int			mfs_second;
+	unsigned long long	mfsrr_watermark;
 };
 
 struct au_opt {
