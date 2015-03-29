@@ -40,8 +40,8 @@ out:
 
 static match_table_t brperm = {
 	{AuBrPerm_RO, AUFS_BRPERM_RO},
+	{AuBrPerm_RR, AUFS_BRPERM_RR},
 	{AuBrPerm_RW, AUFS_BRPERM_RW},
-	/* add more later */
 	{0, NULL}
 };
 
@@ -138,6 +138,7 @@ int au_br_perm_val(char *perm)
 	bad = 0;
 	switch (val & AuBrPerm_Mask) {
 	case AuBrPerm_RO:
+	case AuBrPerm_RR:
 		bad = val & AuBrWAttr_Mask;
 		val &= ~AuBrWAttr_Mask;
 		break;
@@ -202,7 +203,9 @@ int au_opt_add(struct au_opt *opt, char *opt_str, unsigned long sb_flags,
 	if (!err) {
 		if (!p) {
 			add->perm = AuBrPerm_RO;
-			if (!bindex && !(sb_flags & SB_RDONLY))
+			if (au_test_fs_rr(add->path.dentry->d_sb))
+				add->perm = AuBrPerm_RR;
+			else if (!bindex && !(sb_flags & SB_RDONLY))
 				add->perm = AuBrPerm_RW;
 		}
 		opt->type = Opt_add;
