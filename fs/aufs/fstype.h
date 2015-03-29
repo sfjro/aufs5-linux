@@ -241,7 +241,9 @@ static inline int au_test_f2fs(struct super_block *sb __maybe_unused)
 static inline int au_test_fs_unsuppoted(struct super_block *sb)
 {
 	return
+#ifndef CONFIG_AUFS_BR_RAMFS
 		au_test_ramfs(sb) ||
+#endif
 		au_test_procfs(sb)
 		|| au_test_sysfs(sb)
 		|| au_test_configfs(sb)
@@ -256,6 +258,9 @@ static inline int au_test_fs_unsuppoted(struct super_block *sb)
 static inline int au_test_fs_remote(struct super_block *sb)
 {
 	return !au_test_tmpfs(sb)
+#ifdef CONFIG_AUFS_BR_RAMFS
+		&& !au_test_ramfs(sb)
+#endif
 		&& !(sb->s_type->fs_flags & FS_REQUIRES_DEV);
 }
 
@@ -295,6 +300,9 @@ static inline int au_test_fs_bad_iattr(struct super_block *sb)
 static inline int au_test_fs_no_limit_nlink(struct super_block *sb)
 {
 	return au_test_tmpfs(sb)
+#ifdef CONFIG_AUFS_BR_RAMFS
+		|| au_test_ramfs(sb)
+#endif
 		|| au_test_ubifs(sb)
 		|| au_test_hfsplus(sb);
 }
