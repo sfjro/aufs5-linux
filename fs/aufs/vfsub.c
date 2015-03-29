@@ -443,6 +443,83 @@ ssize_t vfsub_write_k(struct file *file, void *kbuf, size_t count, loff_t *ppos)
 
 /* ---------------------------------------------------------------------- */
 
+struct au_vfsub_mkdir_args {
+	struct dentry **errp;
+	struct inode *dir;
+	struct path *path;
+	int mode;
+};
+
+static void au_call_vfsub_mkdir(void *args)
+{
+	struct au_vfsub_mkdir_args *a = args;
+	*a->errp = vfsub_mkdir(a->dir, a->path, a->mode);
+}
+
+struct dentry *vfsub_sio_mkdir(struct inode *dir, struct path *path, int mode)
+{
+	int err, do_sio;
+	struct mnt_idmap *idmap;
+	struct dentry *ret;
+
+	idmap = mnt_idmap(path->mnt);
+	do_sio = au_test_h_perm_sio(idmap, dir, MAY_EXEC | MAY_WRITE);
+	if (!do_sio)
+		ret = vfsub_mkdir(dir, path, mode);
+	else {
+		struct au_vfsub_mkdir_args args = {
+			.errp	= &ret,
+			.dir	= dir,
+			.path	= path,
+			.mode	= mode
+		};
+		err = au_wkq_wait(au_call_vfsub_mkdir, &args);
+		if (unlikely(err))
+			ret = ERR_PTR(err);
+	}
+
+	return ret;
+}
+
+struct au_vfsub_rmdir_args {
+	int *errp;
+	struct inode *dir;
+	struct path *path;
+};
+
+static void au_call_vfsub_rmdir(void *args)
+{
+	struct au_vfsub_rmdir_args *a = args;
+	*a->errp = vfsub_rmdir(a->dir, a->path);
+}
+
+int vfsub_sio_rmdir(struct inode *dir, struct path *path)
+{
+	int err, do_sio, wkq_err;
+	struct mnt_idmap *idmap;
+
+	idmap = mnt_idmap(path->mnt);
+	do_sio = au_test_h_perm_sio(idmap, dir, MAY_EXEC | MAY_WRITE);
+	if (!do_sio) {
+		lockdep_off();
+		err = vfsub_rmdir(dir, path);
+		lockdep_on();
+	} else {
+		struct au_vfsub_rmdir_args args = {
+			.errp	= &err,
+			.dir	= dir,
+			.path	= path
+		};
+		wkq_err = au_wkq_wait(au_call_vfsub_rmdir, &args);
+		if (unlikely(wkq_err))
+			err = wkq_err;
+	}
+
+	return err;
+}
+
+/* ---------------------------------------------------------------------- */
+
 struct notify_change_args {
 	int *errp;
 	const struct path *path;

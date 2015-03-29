@@ -59,6 +59,11 @@ struct au_sbinfo *au_si_alloc(struct super_block *sb)
 	sbinfo->si_bbot = -1;
 	sbinfo->si_last_br_id = AUFS_BRANCH_MAX / 2;
 
+	sbinfo->si_wbr_copyup = AuWbrCopyup_Def;
+	sbinfo->si_wbr_create = AuWbrCreate_Def;
+	sbinfo->si_wbr_copyup_ops = au_wbr_copyup_ops + sbinfo->si_wbr_copyup;
+	sbinfo->si_wbr_create_ops = au_wbr_create_ops + sbinfo->si_wbr_create;
+
 	sbinfo->si_mntflags = au_opts_plink(AuOpt_Def);
 
 	sbinfo->si_xino_jiffy = jiffies;

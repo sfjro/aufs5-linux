@@ -24,6 +24,7 @@ enum {
 	Opt_trunc_xino_path, Opt_itrunc_xino,
 	Opt_trunc_xib,
 	Opt_plink, Opt_list_plink,
+	Opt_wbr_copyup, Opt_wbr_create,
 	Opt_tail, Opt_ignore, Opt_ignore_silent, Opt_err
 };
 
@@ -59,6 +60,23 @@ static inline unsigned int au_opts_plink(unsigned int mntflags)
 
 /* ---------------------------------------------------------------------- */
 
+/* policies to select one among multiple writable branches */
+enum {
+	AuWbrCreate_TDP,	/* top down parent */
+	/* add more later */
+
+	AuWbrCreate_Def = AuWbrCreate_TDP
+};
+
+enum {
+	AuWbrCopyup_TDP,	/* top down parent */
+	/* add more later */
+
+	AuWbrCopyup_Def = AuWbrCopyup_TDP
+};
+
+/* ---------------------------------------------------------------------- */
+
 struct file;
 
 struct au_opt_add {
@@ -77,12 +95,19 @@ struct au_opt_xino_itrunc {
 	aufs_bindex_t	bindex;
 };
 
+struct au_opt_wbr_create {
+	int			wbr_create;
+	/* add more later */
+};
+
 struct au_opt {
 	int type;
 	union {
 		struct au_opt_xino	xino;
 		struct au_opt_xino_itrunc xino_itrunc;
 		struct au_opt_add	add;
+		struct au_opt_wbr_create wbr_create;
+		int			wbr_copyup;
 		bool			tf; /* generic flag, true or false */
 		/* add more later */
 	};
@@ -109,6 +134,10 @@ struct au_opts {
 /* opts.c */
 int au_br_perm_val(char *perm);
 void au_optstr_br_perm(au_br_perm_str_t *str, int perm);
+int au_wbr_create_val(char *str, struct au_opt_wbr_create *create);
+const char *au_optstr_wbr_create(int wbr_create);
+int au_wbr_copyup_val(char *str);
+const char *au_optstr_wbr_copyup(int wbr_copyup);
 
 int au_opt_add(struct au_opt *opt, char *opt_str, unsigned long sb_flags,
 	       aufs_bindex_t bindex);
