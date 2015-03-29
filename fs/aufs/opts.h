@@ -28,6 +28,7 @@ enum {
 	Opt_udba,
 	Opt_dio,
 	Opt_wbr_copyup, Opt_wbr_create,
+	Opt_acl,
 	Opt_tail, Opt_ignore, Opt_ignore_silent, Opt_err
 };
 

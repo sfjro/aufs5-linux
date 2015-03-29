@@ -230,6 +230,8 @@ static int aufs_show_options(struct seq_file *m, struct dentry *dentry)
 } while (0)
 
 	sb = dentry->d_sb;
+	if (sb->s_flags & SB_POSIXACL)
+		seq_puts(m, ",acl");
 #if 0 /* reserved for future use */
 	if (sb->s_flags & SB_I_VERSION)
 		seq_puts(m, ",i_version");

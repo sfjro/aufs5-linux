@@ -153,15 +153,19 @@ static noinline_for_stack
 int cpup_iattr(struct dentry *dst, aufs_bindex_t bindex, struct path *h_src,
 	       struct au_cpup_reg_attr *h_src_attr)
 {
-	int err, sbits;
+	int err, sbits, icex;
+	unsigned int mnt_flags;
+	unsigned char verbose;
 	struct iattr ia;
 	struct path h_path;
 	struct inode *h_isrc, *h_idst;
 	struct kstat *h_st;
+	struct au_branch *br;
 
+	br = au_sbr(dst->d_sb, bindex);
+	h_path.mnt = au_br_mnt(br);
 	h_path.dentry = au_h_dptr(dst, bindex);
 	h_idst = d_inode(h_path.dentry);
-	h_path.mnt = au_sbr_mnt(dst->d_sb, bindex);
 	h_isrc = d_inode(h_src->dentry);
 	ia.ia_valid = ATTR_FORCE | ATTR_UID | ATTR_GID
 		| ATTR_ATIME | ATTR_MTIME | ATTR_CTIME
@@ -199,6 +203,15 @@ int cpup_iattr(struct dentry *dst, aufs_bindex_t bindex, struct path *h_src,
 		ia.ia_valid = ATTR_FORCE | ATTR_MODE;
 		ia.ia_mode = h_isrc->i_mode;
 		err = vfsub_notify_change(&h_path, &ia);
+	}
+
+	icex = br->br_perm & AuBrAttr_ICEX;
+	if (!err) {
+		mnt_flags = au_mntflags(dst->d_sb);
+		/* re-commit later */
+		/* verbose = !!au_opt_test(mnt_flags, VERBOSE); */
+		verbose = 0;
+		err = au_cpup_xattr(&h_path, h_src, icex, verbose);
 	}
 
 	return err;
@@ -548,9 +561,45 @@ out:
 	return err;
 }
 
-static void au_do_cpup_dir(struct au_cp_generic *cpg, struct dentry *dst_parent)
+/*
+ * regardless 'acl' option, reset all ACL.
+ * All ACL will be copied up later from the original entry on the lower branch.
+ */
+static int au_reset_acl(struct path *h_path, umode_t mode)
 {
+	int err;
+	struct dentry *h_dentry;
+	struct mnt_idmap *h_idmap;
+
+	h_idmap = mnt_idmap(h_path->mnt);
+	h_dentry = h_path->dentry;
+	/* forget_all_cached_acls(h_inode)); */
+	err = vfsub_remove_acl(h_idmap, h_dentry, XATTR_NAME_POSIX_ACL_ACCESS);
+	AuTraceErr(err);
+	if (err == -EOPNOTSUPP)
+		err = 0;
+	if (!err)
+		err = vfsub_acl_chmod(h_idmap, h_dentry, mode);
+
+	AuTraceErr(err);
+	return err;
+}
+
+static int au_do_cpup_dir(struct au_cp_generic *cpg, struct dentry *dst_parent,
+			  struct inode *h_dir, struct path *h_path)
+{
+	int err;
 	struct inode *dir, *inode;
+	struct mnt_idmap *h_idmap;
+
+	h_idmap = mnt_idmap(h_path->mnt);
+	err = vfsub_remove_acl(h_idmap, h_path->dentry,
+			       XATTR_NAME_POSIX_ACL_DEFAULT);
+	AuTraceErr(err);
+	if (err == -EOPNOTSUPP)
+		err = 0;
+	if (unlikely(err))
+		goto out;
 
 	/*
 	 * strange behaviour from the users view,
@@ -561,6 +610,9 @@ static void au_do_cpup_dir(struct au_cp_generic *cpg, struct dentry *dst_parent)
 		au_cpup_attr_nlink(dir, /*force*/1);
 	inode = d_inode(cpg->dentry);
 	au_cpup_attr_nlink(inode, /*force*/1);
+
+out:
+	return err;
 }
 
 static noinline_for_stack
@@ -621,7 +673,7 @@ int cpup_entry(struct au_cp_generic *cpg, struct dentry *dst_parent,
 				h_path.dentry = dget(ret);
 				au_set_h_dptr(cpg->dentry, cpg->bdst, ret);
 			}
-			au_do_cpup_dir(cpg, dst_parent);
+			err = au_do_cpup_dir(cpg, dst_parent, h_dir, &h_path);
 		}
 		break;
 	case S_IFLNK:
@@ -639,6 +691,8 @@ int cpup_entry(struct au_cp_generic *cpg, struct dentry *dst_parent,
 		AuIOErr("Unknown inode type 0%o\n", mode);
 		err = -EIO;
 	}
+	if (!err)
+		err = au_reset_acl(&h_path, mode);
 
 	mnt_flags = au_mntflags(sb);
 	if (!au_opt_test(mnt_flags, UDBA_NONE)

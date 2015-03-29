@@ -13,6 +13,8 @@
 #ifdef __KERNEL__
 
 #include <linux/fs.h>
+#include <linux/posix_acl.h>
+#include <linux/xattr.h>
 #include "debug.h"
 #include "fstype.h"
 
@@ -205,6 +207,22 @@ static inline int vfsub_update_time(struct inode *h_inode, int flags)
 	/* no vfsub_update_h_iattr() since we don't have struct path */
 }
 
+#ifdef CONFIG_FS_POSIX_ACL
+static inline int vfsub_acl_chmod(struct mnt_idmap *h_idmap,
+				  struct dentry *h_dentry, umode_t h_mode)
+{
+	int err;
+
+	err = posix_acl_chmod(h_idmap, h_dentry, h_mode);
+	if (err == -EOPNOTSUPP)
+		err = 0;
+	return err;
+}
+#else
+AuStubInt0(vfsub_acl_chmod, struct mnt_idmap *h_idmap,
+	   struct dentry *h_dentry, umode_t h_mode);
+#endif
+
 /*
  * re-use branch fs's ioctl(FICLONE) while aufs itself doesn't support such
  * ioctl.
@@ -245,6 +263,65 @@ static inline int vfsub_getattr(const struct path *path, struct kstat *st)
 {
 	return vfs_getattr(path, st, STATX_BASIC_STATS, AT_STATX_SYNC_AS_STAT);
 }
+
+/* ---------------------------------------------------------------------- */
+
+static inline int vfsub_setxattr(struct mnt_idmap *idmap,
+				 struct dentry *dentry, const char *name,
+				 const void *value, size_t size, int flags)
+{
+	int err;
+
+	lockdep_off();
+	err = vfs_setxattr(idmap, dentry, name, value, size, flags);
+	lockdep_on();
+
+	return err;
+}
+
+static inline int vfsub_removexattr(struct mnt_idmap *idmap,
+				    struct dentry *dentry, const char *name)
+{
+	int err;
+
+	lockdep_off();
+	err = vfs_removexattr(idmap, dentry, name);
+	lockdep_on();
+
+	return err;
+}
+
+#ifdef CONFIG_FS_POSIX_ACL
+static inline int vfsub_set_acl(struct mnt_idmap *idmap,
+				struct dentry *dentry, const char *name,
+				struct posix_acl *acl)
+{
+	int err;
+
+	lockdep_off();
+	err = vfs_set_acl(idmap, dentry, name, acl);
+	lockdep_on();
+
+	return err;
+}
+
+static inline int vfsub_remove_acl(struct mnt_idmap *idmap,
+				   struct dentry *dentry, const char *name)
+{
+	int err;
+
+	lockdep_off();
+	err = vfs_remove_acl(idmap, dentry, name);
+	lockdep_on();
+
+	return err;
+}
+#else
+AuStubInt0(vfsub_set_acl, struct mnt_idmap *idmap, struct dentry *dentry,
+	   const char *name, struct posix_acl *acl);
+AuStubInt0(vfsub_remove_acl, struct mnt_idmap *idmap,
+	   struct dentry *dentry, const char *name);
+#endif
 
 #endif /* __KERNEL__ */
 #endif /* __AUFS_VFSUB_H__ */

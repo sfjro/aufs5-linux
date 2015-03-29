@@ -35,6 +35,8 @@ static int h_permission(struct inode *h_inode, int mask,
 	 * - skip the lower fs test in the case of write to ro branch.
 	 * - nfs dir permission write check is optimized, but a policy for
 	 *   link/rename requires a real check.
+	 * - nfs always sets SB_POSIXACL regardless its mount option 'noacl.'
+	 *   in this case, generic_permission() returns -EOPNOTSUPP.
 	 */
 	h_idmap = mnt_idmap(h_path->mnt);
 	if ((write_mask && !au_br_writable(brperm))
@@ -42,7 +44,11 @@ static int h_permission(struct inode *h_inode, int mask,
 		&& write_mask && !(mask & MAY_READ))
 	    || !h_inode->i_op->permission) {
 		/* AuLabel(generic_permission); */
+		/* AuDbg("get_acl %ps\n", h_inode->i_op->get_acl); */
 		err = generic_permission(h_idmap, h_inode, mask);
+		if (err == -EOPNOTSUPP && au_test_nfs_noacl(h_inode))
+			err = h_inode->i_op->permission(h_idmap, h_inode,
+							mask);
 		AuTraceErr(err);
 	} else {
 		/* AuLabel(h_inode->permission); */
@@ -720,6 +726,7 @@ static int aufs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 	struct super_block *sb;
 	struct file *file;
 	struct au_icpup_args *a;
+	struct mnt_idmap *h_idmap;
 
 	inode = d_inode(dentry);
 	IMustLock(inode);
@@ -816,6 +823,14 @@ static int aufs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 #endif
 	} else
 		err = vfsub_notify_change(&a->h_path, ia);
+	/*
+	 * regardless aufs 'acl' option setting.
+	 * why don't all acl-aware fs call this func from their ->setattr()?
+	 */
+	if (!err && (ia->ia_valid & ATTR_MODE)) {
+		h_idmap = mnt_idmap(a->h_path.mnt);
+		err = vfsub_acl_chmod(h_idmap, a->h_path.dentry, ia->ia_mode);
+	}
 	if (!err)
 		au_cpup_attr_changeable(inode);
 
@@ -841,6 +856,101 @@ out:
 	AuTraceErr(err);
 	return err;
 }
+
+#if IS_ENABLED(CONFIG_AUFS_XATTR) || IS_ENABLED(CONFIG_FS_POSIX_ACL)
+static int au_h_path_to_set_attr(struct dentry *dentry,
+				 struct au_icpup_args *a, struct path *h_path)
+{
+	int err;
+	struct super_block *sb;
+
+	sb = dentry->d_sb;
+	a->udba = au_opt_udba(sb);
+	/* no d_unlinked(), to set UDBA_NONE for root */
+	if (d_unhashed(dentry))
+		a->udba = AuOpt_UDBA_NONE;
+	if (a->udba != AuOpt_UDBA_NONE) {
+		AuDebugOn(IS_ROOT(dentry));
+		err = au_reval_for_attr(dentry, au_sigen(sb));
+		if (unlikely(err))
+			goto out;
+	}
+	err = au_pin_and_icpup(dentry, /*ia*/NULL, a);
+	if (unlikely(err < 0))
+		goto out;
+
+	h_path->dentry = a->h_path.dentry;
+	h_path->mnt = au_sbr_mnt(sb, a->btgt);
+
+out:
+	return err;
+}
+
+ssize_t au_sxattr(struct dentry *dentry, struct inode *inode,
+		  struct au_sxattr *arg)
+{
+	int err;
+	struct path h_path;
+	struct super_block *sb;
+	struct au_icpup_args *a;
+	struct inode *h_inode;
+	struct mnt_idmap *h_idmap;
+
+	IMustLock(inode);
+
+	err = -ENOMEM;
+	a = kzalloc(sizeof(*a), GFP_NOFS);
+	if (unlikely(!a))
+		goto out;
+
+	sb = dentry->d_sb;
+	err = si_read_lock(sb, AuLock_FLUSH | AuLock_NOPLM);
+	if (unlikely(err))
+		goto out_kfree;
+
+	h_path.dentry = NULL;	/* silence gcc */
+	di_write_lock_child(dentry);
+	err = au_h_path_to_set_attr(dentry, a, &h_path);
+	if (unlikely(err))
+		goto out_di;
+	h_idmap = mnt_idmap(h_path.mnt);
+
+	inode_unlock(a->h_inode);
+	switch (arg->type) {
+	case AU_XATTR_SET:
+		AuDebugOn(d_is_negative(h_path.dentry));
+		err = vfsub_setxattr(h_idmap, h_path.dentry,
+				     arg->u.set.name, arg->u.set.value,
+				     arg->u.set.size, arg->u.set.flags);
+		break;
+	case AU_ACL_SET:
+		err = -EOPNOTSUPP;
+		h_inode = d_inode(h_path.dentry);
+		if (h_inode->i_op->set_acl) {
+			/* this will call posix_acl_update_mode */
+			err = h_inode->i_op->set_acl(h_idmap, h_path.dentry,
+						     arg->u.acl_set.acl,
+						     arg->u.acl_set.type);
+		}
+		break;
+	}
+	if (!err)
+		au_cpup_attr_timesizes(inode);
+
+	au_unpin(&a->pin);
+	if (unlikely(err))
+		au_update_dbtop(dentry);
+
+out_di:
+	di_write_unlock(dentry);
+	si_read_unlock(sb);
+out_kfree:
+	au_kfree_rcu(a);
+out:
+	AuTraceErr(err);
+	return err;
+}
+#endif
 
 static void au_refresh_iattr(struct inode *inode, struct kstat *st,
 			     unsigned int nlink)
@@ -871,17 +981,18 @@ static void au_refresh_iattr(struct inode *inode, struct kstat *st,
 }
 
 /*
+ * common routine for aufs_getattr() and au_getxattr().
  * returns zero or negative (an error).
  * @dentry will be read-locked in success.
  */
-int au_h_path_getattr(struct dentry *dentry, int force, struct path *h_path)
+int au_h_path_getattr(struct dentry *dentry, struct inode *inode, int force,
+		      struct path *h_path, int locked)
 {
 	int err;
 	unsigned int mnt_flags, sigen;
 	unsigned char udba_none;
 	aufs_bindex_t bindex;
 	struct super_block *sb, *h_sb;
-	struct inode *inode;
 
 	h_path->mnt = NULL;
 	h_path->dentry = NULL;
@@ -890,6 +1001,9 @@ int au_h_path_getattr(struct dentry *dentry, int force, struct path *h_path)
 	sb = dentry->d_sb;
 	mnt_flags = au_mntflags(sb);
 	udba_none = !!au_opt_test(mnt_flags, UDBA_NONE);
+
+	if (unlikely(locked))
+		goto body; /* skip locking dinfo */
 
 	/* support fstat(2) */
 	if (!d_unlinked(dentry) && !udba_none) {
@@ -918,7 +1032,12 @@ int au_h_path_getattr(struct dentry *dentry, int force, struct path *h_path)
 	} else
 		di_read_lock_child(dentry, AuLock_IR);
 
-	inode = d_inode(dentry);
+body:
+	if (!inode) {
+		inode = d_inode(dentry);
+		if (unlikely(!inode))
+			goto out;
+	}
 	bindex = au_ibtop(inode);
 	h_path->mnt = au_sbr_mnt(sb, bindex);
 	h_sb = h_path->mnt->mnt_sb;
@@ -958,7 +1077,8 @@ static int aufs_getattr(struct mnt_idmap *idmap, const struct path *path,
 	err = si_read_lock(sb, AuLock_FLUSH | AuLock_NOPLM);
 	if (unlikely(err))
 		goto out;
-	err = au_h_path_getattr(dentry, /*force*/0, &h_path);
+	err = au_h_path_getattr(dentry, /*inode*/NULL, /*force*/0, &h_path,
+				/*locked*/0);
 	if (unlikely(err))
 		goto out_si;
 	if (unlikely(!h_path.dentry))
@@ -1124,8 +1244,18 @@ struct inode_operations aufs_iop_nogetattr[AuIop_Last],
 	aufs_iop[] = {
 	[AuIop_SYMLINK] = {
 		.permission	= aufs_permission,
+#ifdef CONFIG_FS_POSIX_ACL
+		.get_inode_acl	= aufs_get_inode_acl,
+		.get_acl	= aufs_get_acl,
+		.set_acl	= aufs_set_acl, /* unsupport for symlink? */
+#endif
+
 		.setattr	= aufs_setattr,
 		.getattr	= aufs_getattr,
+
+#ifdef CONFIG_AUFS_XATTR
+		.listxattr	= aufs_listxattr,
+#endif
 
 		.get_link	= aufs_get_link
 
@@ -1143,16 +1273,36 @@ struct inode_operations aufs_iop_nogetattr[AuIop_Last],
 		.rename		= aufs_rename,
 
 		.permission	= aufs_permission,
+#ifdef CONFIG_FS_POSIX_ACL
+		.get_inode_acl	= aufs_get_inode_acl,
+		.get_acl	= aufs_get_acl,
+		.set_acl	= aufs_set_acl,
+#endif
+
 		.setattr	= aufs_setattr,
 		.getattr	= aufs_getattr,
+
+#ifdef CONFIG_AUFS_XATTR
+		.listxattr	= aufs_listxattr,
+#endif
 
 		.update_time	= aufs_update_time,
 		.tmpfile	= aufs_tmpfile
 	},
 	[AuIop_OTHER] = {
 		.permission	= aufs_permission,
+#ifdef CONFIG_FS_POSIX_ACL
+		.get_inode_acl	= aufs_get_inode_acl,
+		.get_acl	= aufs_get_acl,
+		.set_acl	= aufs_set_acl,
+#endif
+
 		.setattr	= aufs_setattr,
 		.getattr	= aufs_getattr,
+
+#ifdef CONFIG_AUFS_XATTR
+		.listxattr	= aufs_listxattr,
+#endif
 
 		.update_time	= aufs_update_time
 	}

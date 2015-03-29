@@ -59,6 +59,15 @@ static match_table_t brperm = {
 };
 
 static match_table_t brattr = {
+#ifdef CONFIG_AUFS_XATTR
+	{AuBrAttr_ICEX, AUFS_BRATTR_ICEX},
+	{AuBrAttr_ICEX_SEC, AUFS_BRATTR_ICEX_SEC},
+	{AuBrAttr_ICEX_SYS, AUFS_BRATTR_ICEX_SYS},
+	{AuBrAttr_ICEX_TR, AUFS_BRATTR_ICEX_TR},
+	{AuBrAttr_ICEX_USR, AUFS_BRATTR_ICEX_USR},
+	{AuBrAttr_ICEX_OTH, AUFS_BRATTR_ICEX_OTH},
+#endif
+
 	/* ro/rr branch */
 	{AuBrRAttr_WH, AUFS_BRRATTR_WH},
 
@@ -511,6 +520,13 @@ static int au_opt_simple(struct super_block *sb, struct au_opt *opt,
 			au_fclr_opts(opts->flags, TRUNC_XIB);
 		break;
 
+	case Opt_acl:
+		if (opt->tf)
+			sb->s_flags |= SB_POSIXACL;
+		else
+			sb->s_flags &= ~SB_POSIXACL;
+		break;
+
 	default:
 		err = 0;
 		break;
@@ -601,8 +617,17 @@ int au_opts_verify(struct super_block *sb, unsigned long sb_flags,
 		skip = 0;
 		h_dir = au_h_iptr(dir, bindex);
 		br = au_sbr(sb, bindex);
-		do_free = 0;
 
+		if ((br->br_perm & AuBrAttr_ICEX)
+		    && !h_dir->i_op->listxattr)
+			br->br_perm &= ~AuBrAttr_ICEX;
+#if 0 /* untested */
+		if ((br->br_perm & AuBrAttr_ICEX_SEC)
+		    && (au_br_sb(br)->s_flags & SB_NOSEC))
+			br->br_perm &= ~AuBrAttr_ICEX_SEC;
+#endif
+
+		do_free = 0;
 		wbr = br->br_wbr;
 		if (wbr)
 			wbr_wh_read_lock(wbr);
