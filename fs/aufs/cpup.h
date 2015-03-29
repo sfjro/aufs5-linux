@@ -42,6 +42,11 @@ struct au_cp_generic {
 						   for link(2) */
 #define AuCpup_RENAME		BIT(2)		/* rename after cpup */
 
+#define AuCpup_OVERWRITE	BIT(4)		/* allow overwriting the
+						   existing entry */
+#define AuCpup_RWDST		BIT(5)		/* force write target even if
+						   the branch is marked as RO */
+
 #define au_ftest_cpup(flags, name)	((flags) & AuCpup_##name)
 #define au_fset_cpup(flags, name) \
 	do { (flags) |= AuCpup_##name; } while (0)
@@ -50,6 +55,7 @@ struct au_cp_generic {
 
 int au_copy_file(struct file *dst, struct file *src, loff_t len);
 int au_sio_cpup_simple(struct au_cp_generic *cpg);
+int au_sio_cpdown_simple(struct au_cp_generic *cpg);
 int au_sio_cpup_wh(struct au_cp_generic *cpg, struct file *file);
 
 int au_cp_dirs(struct dentry *dentry, aufs_bindex_t bdst,
