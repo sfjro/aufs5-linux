@@ -652,6 +652,7 @@ struct inode_operations aufs_iop[] = {
 		.mkdir		= aufs_mkdir,
 		.rmdir		= aufs_rmdir,
 		.mknod		= aufs_mknod,
+		.rename		= aufs_rename,
 
 		.permission	= aufs_permission,
 
