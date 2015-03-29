@@ -37,15 +37,22 @@ enum {
 #define AuOpt_TRUNC_XINO	BIT(1)		/* truncate xino files */
 #define AuOpt_UDBA_NONE		BIT(2)		/* users direct branch access */
 #define AuOpt_UDBA_REVAL	BIT(3)
+#define AuOpt_UDBA_HNOTIFY	BIT(4)
 #define AuOpt_PLINK		BIT(6)		/* pseudo-link */
 #define AuOpt_DIO		BIT(13)		/* direct io */
+
+#ifndef CONFIG_AUFS_HNOTIFY
+#undef AuOpt_UDBA_HNOTIFY
+#define AuOpt_UDBA_HNOTIFY	0
+#endif
 
 #define AuOpt_Def	(AuOpt_XINO \
 			 | AuOpt_UDBA_REVAL \
 			 | AuOpt_PLINK \
 			 | AuOpt_DIO)
 #define AuOptMask_UDBA	(AuOpt_UDBA_NONE \
-			 | AuOpt_UDBA_REVAL)
+			 | AuOpt_UDBA_REVAL \
+			 | AuOpt_UDBA_HNOTIFY)
 
 #define AuOpt_LkupDirFlags	(LOOKUP_FOLLOW | LOOKUP_DIRECTORY)
 
