@@ -62,6 +62,7 @@ struct inode *au_iget_locked(struct super_block *sb, ino_t ino)
 out:
 	/* never return NULL */
 	AuDebugOn(!inode);
+	AuTraceErrPtr(inode);
 	return inode;
 }
 

@@ -115,7 +115,9 @@ AuRWLockFuncs(new_child, NEW_CHILD);
 
 static inline void au_icntnr_init(struct au_icntnr *c)
 {
-	/* re-commit later */
+#ifdef CONFIG_AUFS_DEBUG
+	c->vfs_inode.i_mode = 0;
+#endif
 }
 
 /* ---------------------------------------------------------------------- */
