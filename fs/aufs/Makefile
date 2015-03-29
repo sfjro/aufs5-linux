@@ -16,8 +16,8 @@ obj-$(CONFIG_AUFS_FS) += aufs.o
 aufs-y := module.o sbinfo.o super.o branch.o xino.o sysaufs.o opts.o fsctx.o \
 	wkq.o vfsub.o dcsub.o \
 	cpup.o whout.o \
-	dinfo.o \
-	iinfo.o inode.o
+	dinfo.o dentry.o \
+	iinfo.o inode.o i_op.o
 # add more later
 
 # all are boolean

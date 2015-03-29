@@ -16,6 +16,8 @@
 #include "fstype.h"
 #include "rwsem.h"
 
+struct vfsmount;
+
 struct au_hinode {
 	struct inode		*hi_inode;
 	aufs_bindex_t		hi_id;
@@ -43,6 +45,38 @@ struct au_icntnr {
 	struct hlist_bl_node	plink;
 	struct rcu_head		rcu;
 } ____cacheline_aligned_in_smp;
+
+/* au_pin flags */
+#define AuPin_DI_LOCKED		BIT(0)
+#define AuPin_MNT_WRITE		BIT(1)
+#define au_ftest_pin(flags, name)	((flags) & AuPin_##name)
+#define au_fset_pin(flags, name) \
+	do { (flags) |= AuPin_##name; } while (0)
+#define au_fclr_pin(flags, name) \
+	do { (flags) &= ~AuPin_##name; } while (0)
+
+struct au_pin {
+	/* input */
+	struct dentry *dentry;
+	unsigned char lsc_di, lsc_hi, flags;
+	aufs_bindex_t bindex;
+
+	/* output */
+	struct dentry *parent;
+	struct au_hinode *hdir;
+	struct vfsmount *h_mnt;
+
+	/* temporary unlock/relock for copyup */
+	struct dentry *h_dentry, *h_parent;
+	struct au_branch *br;
+	struct task_struct *task;
+};
+
+void au_pin_hdir_unlock(struct au_pin *p);
+int au_pin_hdir_lock(struct au_pin *p);
+int au_pin_hdir_relock(struct au_pin *p);
+void au_pin_hdir_acquire_nest(struct au_pin *p);
+void au_pin_hdir_release(struct au_pin *p);
 
 /* ---------------------------------------------------------------------- */
 
@@ -78,6 +112,16 @@ int au_test_h_perm(struct mnt_idmap *h_idmap, struct inode *h_inode,
 		   int mask);
 int au_test_h_perm_sio(struct mnt_idmap *h_idmap, struct inode *h_inode,
 		       int mask);
+
+/* i_op.c */
+struct dentry *au_pinned_h_parent(struct au_pin *pin);
+void au_pin_init(struct au_pin *pin, struct dentry *dentry,
+		 aufs_bindex_t bindex, int lsc_di, int lsc_hi,
+		 unsigned char flags);
+int au_pin(struct au_pin *pin, struct dentry *dentry, aufs_bindex_t bindex,
+	   unsigned char flags) __must_check;
+int au_do_pin(struct au_pin *pin) __must_check;
+void au_unpin(struct au_pin *pin);
 
 /* iinfo.c */
 struct inode *au_h_iptr(struct inode *inode, aufs_bindex_t bindex);
@@ -300,6 +344,56 @@ static inline struct au_hinode *au_hi(struct inode *inode, aufs_bindex_t bindex)
 	IiMustAnyLock(inode);
 	return au_hinode(au_ii(inode), bindex);
 }
+
+/* ---------------------------------------------------------------------- */
+
+static inline struct dentry *au_pinned_parent(struct au_pin *pin)
+{
+	if (pin)
+		return pin->parent;
+	return NULL;
+}
+
+static inline struct inode *au_pinned_h_dir(struct au_pin *pin)
+{
+	if (pin && pin->hdir)
+		return pin->hdir->hi_inode;
+	return NULL;
+}
+
+static inline struct au_hinode *au_pinned_hdir(struct au_pin *pin)
+{
+	if (pin)
+		return pin->hdir;
+	return NULL;
+}
+
+static inline void au_pin_set_dentry(struct au_pin *pin, struct dentry *dentry)
+{
+	if (pin)
+		pin->dentry = dentry;
+}
+
+static inline void au_pin_set_parent_lflag(struct au_pin *pin,
+					   unsigned char lflag)
+{
+	if (pin) {
+		if (lflag)
+			au_fset_pin(pin->flags, DI_LOCKED);
+		else
+			au_fclr_pin(pin->flags, DI_LOCKED);
+	}
+}
+
+#if 0 /* reserved */
+static inline void au_pin_set_parent(struct au_pin *pin, struct dentry *parent)
+{
+	if (pin) {
+		dput(pin->parent);
+		pin->parent = dget(parent);
+	}
+}
+#endif
 
 #endif /* __KERNEL__ */
 #endif /* __AUFS_INODE_H__ */
