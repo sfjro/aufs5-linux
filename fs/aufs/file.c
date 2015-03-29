@@ -37,7 +37,7 @@ struct file *au_h_open(struct dentry *dentry, aufs_bindex_t bindex, int flags,
 	/* a race condition can happen between open and unlink/rmdir */
 	h_file = ERR_PTR(-ENOENT);
 	h_dentry = au_h_dptr(dentry, bindex);
-	if (!h_dentry || d_is_negative(h_dentry))
+	if (au_test_nfsd() && (!h_dentry || d_is_negative(h_dentry)))
 		goto out;
 	h_inode = d_inode(h_dentry);
 	spin_lock(&h_dentry->d_lock);

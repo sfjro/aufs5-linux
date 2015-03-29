@@ -1527,6 +1527,7 @@ void au_xino_clr(struct super_block *sb)
 {
 	struct au_sbinfo *sbinfo;
 
+	au_xigen_clr(sb);
 	xino_clear_xib(sb);
 	xino_clear_br(sb);
 	sbinfo = au_sbi(sb);
@@ -1551,6 +1552,8 @@ int au_xino_set(struct super_block *sb, struct au_opt_xino *xiopt)
 	au_opt_set(sbinfo->si_mntflags, XINO);
 	err = au_xino_set_xib(sb, path);
 	/* si_x{read,write} are set */
+	if (!err)
+		err = au_xigen_set(sb, path);
 	if (!err)
 		err = au_xino_set_br(sb, path);
 	if (!err)
