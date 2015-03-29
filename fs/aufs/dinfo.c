@@ -33,6 +33,7 @@ struct au_dinfo *au_di_alloc(struct super_block *sb, unsigned int lsc)
 		au_rw_write_lock_nested(&dinfo->di_rwsem, lsc);
 		dinfo->di_btop = -1;
 		dinfo->di_bbot = -1;
+		dinfo->di_bwh = -1;
 		for (i = 0; i < nbr; i++)
 			dinfo->di_hdentry[i].hd_id = -1;
 		goto out;

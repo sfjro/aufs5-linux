@@ -36,6 +36,7 @@
 #include "super.h"
 #include "sysaufs.h"
 #include "vfsub.h"
+#include "whout.h"
 #include "wkq.h"
 /* add more later */
 
