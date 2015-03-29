@@ -197,9 +197,12 @@ static int __init aufs_init(void)
 	err = au_hnotify_init();
 	if (unlikely(err))
 		goto out_wkq;
-	err = au_cache_init();
+	err = au_sysrq_init();
 	if (unlikely(err))
 		goto out_hin;
+	err = au_cache_init();
+	if (unlikely(err))
+		goto out_sysrq;
 
 	err = register_filesystem(&aufs_fs_type);
 	if (unlikely(err))
@@ -211,6 +214,8 @@ static int __init aufs_init(void)
 
 out_cache:
 	au_cache_fin();
+out_sysrq:
+	au_sysrq_fin();
 out_hin:
 	au_hnotify_fin();
 out_wkq:

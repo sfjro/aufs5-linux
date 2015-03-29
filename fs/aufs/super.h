@@ -313,6 +313,7 @@ static inline void au_sbilist_fin(void)
 	AuRwDestroy(&au_sbilist_lock);
 }
 
+#ifdef CONFIG_AUFS_MAGIC_SYSRQ
 static inline void au_sbilist_write_lock(void)
 {
 	au_rw_write_lock(&au_sbilist_lock);
@@ -332,6 +333,16 @@ static inline void au_sbilist_read_unlock(void)
 {
 	au_rw_read_unlock(&au_sbilist_lock);
 }
+
+#define AuGFP_SBILIST	GFP_ATOMIC
+
+#else
+AuStubVoid(au_sbilist_write_lock, void)
+AuStubVoid(au_sbilist_write_unlock, void)
+AuStubVoid(au_sbilist_read_lock, void)
+AuStubVoid(au_sbilist_read_unlock, void)
+#define AuGFP_SBILIST	GFP_NOFS
+#endif /* CONFIG_AUFS_MAGIC_SYSRQ */
 
 static inline void au_sbilist_add(struct super_block *sb)
 {
@@ -355,8 +366,8 @@ AuStubVoid(au_sbilist_read_lock, void)
 AuStubVoid(au_sbilist_read_unlock, void)
 AuStubVoid(au_sbilist_add, struct super_block *sb)
 AuStubVoid(au_sbilist_del, struct super_block *sb)
-#endif
 #define AuGFP_SBILIST	GFP_NOFS
+#endif
 
 /* ---------------------------------------------------------------------- */
 
