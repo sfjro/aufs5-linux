@@ -1055,3 +1055,203 @@ out:
 		au_farray_free(to_free, opened);
 	return err;
 }
+
+/* ---------------------------------------------------------------------- */
+
+/*
+ * change a branch permission
+ */
+
+static void au_warn_ima(void)
+{
+#ifdef CONFIG_IMA
+	/* since it doesn't support mark_files_ro() */
+	AuWarn1("RW -> RO makes IMA to produce wrong message\n");
+#endif
+}
+
+static int do_need_sigen_inc(int a, int b)
+{
+	return au_br_whable(a) && !au_br_whable(b);
+}
+
+static int need_sigen_inc(int old, int new)
+{
+	return do_need_sigen_inc(old, new)
+		|| do_need_sigen_inc(new, old);
+}
+
+static int au_br_mod_files_ro(struct super_block *sb, aufs_bindex_t bindex)
+{
+	int err, do_warn;
+	unsigned int mnt_flags;
+	unsigned long long ull, max;
+	aufs_bindex_t br_id;
+	unsigned char verbose, writer;
+	struct file *file, *hf, **array;
+	struct au_hfile *hfile;
+	struct inode *h_inode;
+
+	mnt_flags = au_mntflags(sb);
+	verbose = !!au_opt_test(mnt_flags, VERBOSE);
+
+	array = au_farray_alloc(sb, &max);
+	err = PTR_ERR(array);
+	if (IS_ERR(array))
+		goto out;
+
+	do_warn = 0;
+	br_id = au_sbr_id(sb, bindex);
+	for (ull = 0; ull < max; ull++) {
+		file = array[ull];
+		if (unlikely(!file))
+			break;
+
+		/* AuDbg("%pD\n", file); */
+		fi_read_lock(file);
+		if (unlikely(au_test_mmapped(file))) {
+			err = -EBUSY;
+			AuVerbose(verbose, "mmapped %pD\n", file);
+			AuDbgFile(file);
+			FiMustNoWaiters(file);
+			fi_read_unlock(file);
+			goto out_array;
+		}
+
+		hfile = &au_fi(file)->fi_htop;
+		hf = hfile->hf_file;
+		if (!d_is_reg(file->f_path.dentry)
+		    || !(file->f_mode & FMODE_WRITE)
+		    || hfile->hf_br->br_id != br_id
+		    || !(hf->f_mode & FMODE_WRITE))
+			array[ull] = NULL;
+		else {
+			do_warn = 1;
+			get_file(file);
+		}
+
+		FiMustNoWaiters(file);
+		fi_read_unlock(file);
+		fput(file);
+	}
+
+	err = 0;
+	if (do_warn)
+		au_warn_ima();
+
+	for (ull = 0; ull < max; ull++) {
+		file = array[ull];
+		if (!file)
+			continue;
+
+		/* todo: already flushed? */
+		/*
+		 * fs/super.c:mark_files_ro() is gone, but aufs keeps its
+		 * approach which resets f_mode and calls mnt_drop_write() and
+		 * file_release_write() for each file, because the branch
+		 * attribute in aufs world is totally different from the native
+		 * fs rw/ro mode.
+		 */
+		/* fi_read_lock(file); */
+		hfile = &au_fi(file)->fi_htop;
+		hf = hfile->hf_file;
+		/* fi_read_unlock(file); */
+		spin_lock(&hf->f_lock);
+		writer = !!(hf->f_mode & FMODE_WRITER);
+		hf->f_mode &= ~(FMODE_WRITE | FMODE_WRITER);
+		spin_unlock(&hf->f_lock);
+		if (writer) {
+			h_inode = file_inode(hf);
+			if (hf->f_mode & FMODE_READ)
+				i_readcount_inc(h_inode);
+			put_write_access(h_inode);
+			mnt_put_write_access(hf->f_path.mnt);
+		}
+	}
+
+out_array:
+	au_farray_free(array, max);
+out:
+	AuTraceErr(err);
+	return err;
+}
+
+int au_br_mod(struct super_block *sb, struct au_opt_mod *mod, int remount,
+	      int *do_refresh)
+{
+	int err, rerr;
+	aufs_bindex_t bindex;
+	struct dentry *root;
+	struct au_branch *br;
+
+	root = sb->s_root;
+	bindex = au_find_dbindex(root, mod->h_root);
+	if (bindex < 0) {
+		if (remount)
+			return 0; /* success */
+		err = -ENOENT;
+		pr_err("%s no such branch\n", mod->path);
+		goto out;
+	}
+	AuDbg("bindex b%d\n", bindex);
+
+	err = test_br(d_inode(mod->h_root), mod->perm, mod->path);
+	if (unlikely(err))
+		goto out;
+
+	br = au_sbr(sb, bindex);
+	AuDebugOn(mod->h_root != au_br_dentry(br));
+	if (br->br_perm == mod->perm)
+		return 0; /* success */
+
+	if (au_br_writable(br->br_perm)) {
+		/* remove whiteout base */
+		err = au_br_init_wh(sb, br, mod->perm);
+		if (unlikely(err))
+			goto out;
+
+		if (!au_br_writable(mod->perm)) {
+			/* rw --> ro, file might be mmapped */
+			DiMustNoWaiters(root);
+			IiMustNoWaiters(d_inode(root));
+			di_write_unlock(root);
+			err = au_br_mod_files_ro(sb, bindex);
+			/* aufs_write_lock() calls ..._child() */
+			di_write_lock_child(root);
+
+			if (unlikely(err)) {
+				rerr = -ENOMEM;
+				br->br_wbr = kzalloc(sizeof(*br->br_wbr),
+						     GFP_NOFS);
+				if (br->br_wbr)
+					rerr = au_wbr_init(br, sb, br->br_perm);
+				if (unlikely(rerr)) {
+					AuIOErr("nested error %d (%d)\n",
+						rerr, err);
+					br->br_perm = mod->perm;
+				}
+			}
+		}
+	} else if (au_br_writable(mod->perm)) {
+		/* ro --> rw */
+		err = -ENOMEM;
+		br->br_wbr = kzalloc(sizeof(*br->br_wbr), GFP_NOFS);
+		if (br->br_wbr) {
+			err = au_wbr_init(br, sb, mod->perm);
+			if (unlikely(err)) {
+				au_kfree_rcu(br->br_wbr);
+				br->br_wbr = NULL;
+			}
+		}
+	}
+	if (unlikely(err))
+		goto out;
+
+	*do_refresh |= need_sigen_inc(br->br_perm, mod->perm);
+	br->br_perm = mod->perm;
+	goto out; /* success */
+
+out:
+	AuTraceErr(err);
+	return err;
+}
