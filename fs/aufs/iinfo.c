@@ -195,6 +195,8 @@ int au_iinfo_init(struct inode *inode)
 		nbr = 1;
 	hi = kmalloc_array(nbr, sizeof(*iinfo->ii_hinode), GFP_NOFS);
 	if (hi) {
+		au_lcnt_inc(&au_sbi(sb)->si_ninodes);
+
 		iinfo->ii_hinode = hi;
 		for (i = 0; i < nbr; i++, hi++)
 			au_hinode_init(hi);
@@ -241,6 +243,7 @@ void au_iinfo_fin(struct inode *inode)
 	AuDebugOn(au_is_bad_inode(inode));
 
 	sb = inode->i_sb;
+	au_lcnt_dec(&au_sbi(sb)->si_ninodes);
 	if (si_pid_test(sb))
 		au_xino_delete_inode(inode, unlinked);
 	else {
