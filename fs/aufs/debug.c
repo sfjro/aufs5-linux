@@ -103,7 +103,7 @@ void au_dpri_inode(struct inode *inode)
 
 	iinfo = au_ii(inode);
 	dpri("i-1: btop %d, bbot %d, gen %d\n",
-	     iinfo->ii_btop, iinfo->ii_bbot, au_iigen(inode));
+	     iinfo->ii_btop, iinfo->ii_bbot, au_iigen(inode, NULL));
 	if (iinfo->ii_btop < 0)
 		return;
 	hn = 0;

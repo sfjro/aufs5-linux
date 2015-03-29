@@ -224,6 +224,11 @@ int au_xino_init_br(struct super_block *sb, struct au_branch *br, ino_t hino,
 ino_t au_xino_new_ino(struct super_block *sb);
 void au_xino_delete_inode(struct inode *inode, const int unlinked);
 
+void au_xinondir_leave(struct super_block *sb, aufs_bindex_t bindex,
+		       ino_t h_ino, int idx);
+int au_xinondir_enter(struct super_block *sb, aufs_bindex_t bindex, ino_t h_ino,
+		      int *idx);
+
 int au_xino_path(struct seq_file *seq, struct file *file);
 
 /* ---------------------------------------------------------------------- */
