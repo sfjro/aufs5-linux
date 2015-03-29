@@ -651,7 +651,7 @@ int au_alloc_root(struct super_block *sb)
 	if (IS_ERR(inode))
 		goto out;
 
-	inode->i_op = &simple_dir_inode_operations; /* replace later */
+	inode->i_op = aufs_iop + AuIop_DIR;
 	inode->i_fop = &simple_dir_operations; /* replace later */
 	inode->i_mode = S_IFDIR;
 	vfsub_inode_nlink_init(inode, 2);

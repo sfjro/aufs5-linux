@@ -13,6 +13,8 @@
 #ifdef __KERNEL__
 
 #include <linux/dcache.h>
+#include <linux/fs.h>
+#include "vfsub.h"
 
 struct au_dpage {
 	int ndentry;
@@ -39,6 +41,53 @@ int au_dcsub_pages_rev_aufs(struct au_dcsub_pages *dpages,
 int au_test_subdir(struct dentry *d1, struct dentry *d2);
 
 /* ---------------------------------------------------------------------- */
+
+/*
+ * todo: in linux-3.13, several similar (but faster) helpers are added to
+ * include/linux/dcache.h. Try them (in the future).
+ */
+
+static inline int au_d_hashed_positive(struct dentry *d)
+{
+	int err;
+	struct inode *inode = d_inode(d);
+
+	err = 0;
+	if (unlikely(d_unhashed(d)
+		     || d_is_negative(d)
+		     /* to support both aufs and branches */
+		     || !vfsub_inode_nlink(inode, AU_I_UNKNOWN)))
+		err = -ENOENT;
+	return err;
+}
+
+static inline int au_d_alive(struct dentry *d)
+{
+	int err;
+	struct inode *inode;
+
+	err = 0;
+	if (!IS_ROOT(d))
+		err = au_d_hashed_positive(d);
+	else {
+		inode = d_inode(d);
+		if (unlikely(d_unlinked(d)
+			     || d_is_negative(d)
+			     || !vfsub_inode_nlink(inode, AU_I_UNKNOWN)))
+			err = -ENOENT;
+	}
+	return err;
+}
+
+static inline int au_alive_dir(struct dentry *d)
+{
+	int err;
+
+	err = au_d_alive(d);
+	if (unlikely(err || IS_DEADDIR(d_inode(d))))
+		err = -ENOENT;
+	return err;
+}
 
 static inline int au_qstreq(const struct qstr *a, const struct qstr *b)
 {

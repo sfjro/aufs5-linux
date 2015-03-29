@@ -150,6 +150,14 @@ int au_test_h_perm_sio(struct mnt_idmap *h_idmap, struct inode *h_inode,
 		       int mask);
 
 /* i_op.c */
+enum {
+	AuIop_SYMLINK,
+	AuIop_DIR,
+	AuIop_OTHER,
+	AuIop_Last
+};
+extern struct inode_operations aufs_iop[AuIop_Last]; /* not const */
+
 struct dentry *au_pinned_h_parent(struct au_pin *pin);
 void au_pin_init(struct au_pin *pin, struct dentry *dentry,
 		 aufs_bindex_t bindex, int lsc_di, int lsc_hi,
