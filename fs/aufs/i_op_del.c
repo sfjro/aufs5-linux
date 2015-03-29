@@ -125,8 +125,9 @@ int au_may_del(struct dentry *dentry, aufs_bindex_t bindex,
 	sb = dentry->d_sb;
 	br = au_sbr(sb, bindex);
 	h_idmap = au_br_idmap(br);
-	if (unlikely(au_test_h_perm(h_idmap, d_inode(h_parent),
-				    MAY_EXEC | MAY_WRITE)))
+	if (unlikely(!au_opt_test(au_mntflags(sb), DIRPERM1)
+		     && au_test_h_perm(h_idmap, d_inode(h_parent),
+				       MAY_EXEC | MAY_WRITE)))
 		goto out;
 
 	h_ppath.dentry = h_parent;

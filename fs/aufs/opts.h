@@ -30,6 +30,7 @@ enum {
 	Opt_dio,
 	Opt_wbr_copyup, Opt_wbr_create,
 	Opt_verbose, Opt_noverbose,
+	Opt_dirperm1,
 	Opt_acl,
 	Opt_tail, Opt_ignore, Opt_ignore_silent, Opt_err
 };
@@ -44,6 +45,8 @@ enum {
 #define AuOpt_UDBA_REVAL	BIT(3)
 #define AuOpt_UDBA_HNOTIFY	BIT(4)
 #define AuOpt_PLINK		BIT(6)		/* pseudo-link */
+#define AuOpt_DIRPERM1		BIT(7)		/* ignore the lower dir's perm
+						   bits */
 #define AuOpt_VERBOSE		BIT(12)		/* print the cause of error */
 #define AuOpt_DIO		BIT(13)		/* direct io */
 
@@ -55,6 +58,7 @@ enum {
 #define AuOpt_Def	(AuOpt_XINO \
 			 | AuOpt_UDBA_REVAL \
 			 | AuOpt_PLINK \
+			 /* | AuOpt_DIRPERM1 */ \
 			 | AuOpt_DIO)
 #define AuOptMask_UDBA	(AuOpt_UDBA_NONE \
 			 | AuOpt_UDBA_REVAL \

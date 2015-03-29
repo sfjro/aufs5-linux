@@ -244,6 +244,7 @@ static void au_fsctx_dump(struct au_opts *opts)
 		/* simple true/false flag */
 		au_fsctx_TF(trunc_xino);
 		au_fsctx_TF(trunc_xib);
+		au_fsctx_TF(dirperm1);
 		au_fsctx_TF(plink);
 		au_fsctx_TF(dio);
 		au_fsctx_TF(verbose);
@@ -355,6 +356,8 @@ const struct fs_parameter_spec aufs_fsctx_paramspec[] = {
 	fsparam_string("udba", Opt_udba),
 
 	fsparam_flag_no("dio", Opt_dio),
+
+	fsparam_flag_no("dirperm1", Opt_dirperm1),
 
 	fsparam_flag_no("verbose", Opt_verbose),
 	fsparam_flag("v", Opt_verbose),
@@ -900,6 +903,7 @@ static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *para
 			break
 	au_fsctx_TF(trunc_xino);
 	au_fsctx_TF(trunc_xib);
+	au_fsctx_TF(dirperm1);
 	au_fsctx_TF(plink);
 	au_fsctx_TF(dio);
 	au_fsctx_TF(verbose);
