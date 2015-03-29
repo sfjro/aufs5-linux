@@ -39,6 +39,49 @@ void au_sub_nlink(struct inode *dir, struct inode *h_dir)
 	vfsub_set_nlink(dir, nlink);
 }
 
+loff_t au_dir_size(struct file *file, struct dentry *dentry)
+{
+	loff_t sz;
+	aufs_bindex_t bindex, bbot;
+	struct file *h_file;
+	struct dentry *h_dentry;
+
+	sz = 0;
+	if (file) {
+		AuDebugOn(!d_is_dir(file->f_path.dentry));
+
+		bbot = au_fbbot_dir(file);
+		for (bindex = au_fbtop(file);
+		     bindex <= bbot && sz < KMALLOC_MAX_SIZE;
+		     bindex++) {
+			h_file = au_hf_dir(file, bindex);
+			if (h_file && file_inode(h_file))
+				sz += vfsub_f_size_read(h_file);
+		}
+	} else {
+		AuDebugOn(!dentry);
+		AuDebugOn(!d_is_dir(dentry));
+
+		bbot = au_dbtaildir(dentry);
+		for (bindex = au_dbtop(dentry);
+		     bindex <= bbot && sz < KMALLOC_MAX_SIZE;
+		     bindex++) {
+			h_dentry = au_h_dptr(dentry, bindex);
+			if (h_dentry && d_is_positive(h_dentry))
+				sz += i_size_read(d_inode(h_dentry));
+		}
+	}
+	if (sz < KMALLOC_MAX_SIZE)
+		sz = roundup_pow_of_two(sz);
+	if (sz > KMALLOC_MAX_SIZE)
+		sz = KMALLOC_MAX_SIZE;
+	else if (sz < NAME_MAX) {
+		BUILD_BUG_ON(AUFS_RDBLK_DEF < NAME_MAX);
+		sz = AUFS_RDBLK_DEF;
+	}
+	return sz;
+}
+
 struct au_dir_ts_arg {
 	struct dentry *dentry;
 	aufs_bindex_t brid;

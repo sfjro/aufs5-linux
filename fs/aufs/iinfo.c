@@ -202,6 +202,7 @@ int au_iinfo_init(struct inode *inode)
 		iinfo->ii_generation.ig_generation = au_sigen(sb);
 		iinfo->ii_btop = -1;
 		iinfo->ii_bbot = -1;
+		iinfo->ii_vdir = NULL;
 		return 0;
 	}
 	return -ENOMEM;
@@ -255,6 +256,9 @@ void au_iinfo_fin(struct inode *inode)
 	}
 
 	iinfo = au_ii(inode);
+	if (iinfo->ii_vdir)
+		au_vdir_free(iinfo->ii_vdir);
+
 	bindex = iinfo->ii_btop;
 	if (bindex >= 0) {
 		hi = au_hinode(iinfo, bindex);

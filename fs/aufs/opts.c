@@ -478,6 +478,17 @@ static int au_opt_simple(struct super_block *sb, struct au_opt *opt,
 		sbinfo->si_wbr_copyup_ops = au_wbr_copyup_ops + opt->wbr_copyup;
 		break;
 
+	case Opt_rdcache:
+		sbinfo->si_rdcache
+			= msecs_to_jiffies(opt->rdcache * MSEC_PER_SEC);
+		break;
+	case Opt_rdblk:
+		sbinfo->si_rdblk = opt->rdblk;
+		break;
+	case Opt_rdhash:
+		sbinfo->si_rdhash = opt->rdhash;
+		break;
+
 	case Opt_trunc_xino:
 		if (opt->tf)
 			au_opt_set(sbinfo->si_mntflags, TRUNC_XINO);

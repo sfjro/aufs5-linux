@@ -133,6 +133,16 @@ static void au_fsctx_dump(struct au_opts *opts)
 				  u.add->path.dentry);
 			break;
 
+		case Opt_rdcache:
+			AuDbg("rdcache %d\n", opt->rdcache);
+			break;
+		case Opt_rdblk:
+			AuDbg("rdblk %d\n", opt->rdblk);
+			break;
+		case Opt_rdhash:
+			AuDbg("rdhash %u\n", opt->rdhash);
+			break;
+
 		case Opt_xino:
 			u.xino = &opt->xino;
 			AuDbg("xino {%s %pD}\n", u.xino->path, u.xino->file);
@@ -247,6 +257,12 @@ const struct fs_parameter_spec aufs_fsctx_paramspec[] = {
 	fsparam_string("udba", Opt_udba),
 
 	fsparam_flag_no("dio", Opt_dio),
+
+	fsparam_s32("rdcache", Opt_rdcache),
+	/* "def" or s32 */
+	fsparam_string("rdblk", Opt_rdblk),
+	/* "def" or s32 */
+	fsparam_string("rdhash", Opt_rdhash),
 
 	fsparam_string("create", Opt_wbr_create),
 	fsparam_string("create_policy", Opt_wbr_create),
@@ -506,6 +522,63 @@ static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *para
 		}
 		err = au_fsctx_parse_xino_itrunc(fc, &opt->xino_itrunc,
 						 result.int_32);
+		break;
+
+	case Opt_rdcache:
+		if (unlikely(result.int_32 > AUFS_RDCACHE_MAX)) {
+			errorfc(fc, "rdcache must be smaller than %d",
+				AUFS_RDCACHE_MAX);
+			break;
+		}
+		err = 0;
+		opt->rdcache = result.int_32;
+		break;
+
+	case Opt_rdblk:
+		err = 0;
+		opt->rdblk = AUFS_RDBLK_DEF;
+		if (!strcmp(param->string, "def"))
+			break;
+
+		err = kstrtoint(param->string, 0, &result.int_32);
+		if (unlikely(err)) {
+			errorfc(fc, "bad value in %s", param->key);
+			break;
+		}
+		err = -EINVAL;
+		if (unlikely(result.int_32 < 0
+			     || result.int_32 > KMALLOC_MAX_SIZE)) {
+			errorfc(fc, "bad value in %s", param->key);
+			break;
+		}
+		if (unlikely(result.int_32 && result.int_32 < NAME_MAX)) {
+			errorfc(fc, "rdblk must be larger than %d", NAME_MAX);
+			break;
+		}
+		err = 0;
+		opt->rdblk = result.int_32;
+		break;
+
+	case Opt_rdhash:
+		err = 0;
+		opt->rdhash = AUFS_RDHASH_DEF;
+		if (!strcmp(param->string, "def"))
+			break;
+
+		err = kstrtoint(param->string, 0, &result.int_32);
+		if (unlikely(err)) {
+			errorfc(fc, "bad value in %s", param->key);
+			break;
+		}
+		/* how about zero? */
+		if (result.int_32 < 0
+		    || result.int_32 * sizeof(struct hlist_head)
+		    > KMALLOC_MAX_SIZE) {
+			err = -EINVAL;
+			errorfc(fc, "bad integer in %s", param->key);
+			break;
+		}
+		opt->rdhash = result.int_32;
 		break;
 
 	case Opt_udba:

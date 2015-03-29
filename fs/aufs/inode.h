@@ -54,6 +54,7 @@ struct au_iigen {
 	__u32		ig_generation, ig_flags;
 };
 
+struct au_vdir;
 struct au_iinfo {
 	struct au_iigen		ii_generation;
 	struct super_block	*ii_hsb1;	/* no get/put */
@@ -62,6 +63,7 @@ struct au_iinfo {
 	aufs_bindex_t		ii_btop, ii_bbot;
 	__u32			ii_higen;
 	struct au_hinode	*ii_hinode;
+	struct au_vdir		*ii_vdir;
 };
 
 struct au_icntnr {
@@ -372,6 +374,12 @@ static inline aufs_bindex_t au_ibbot(struct inode *inode)
 	return au_ii(inode)->ii_bbot;
 }
 
+static inline struct au_vdir *au_ivdir(struct inode *inode)
+{
+	IiMustAnyLock(inode);
+	return au_ii(inode)->ii_vdir;
+}
+
 static inline struct dentry *au_hi_wh(struct inode *inode, aufs_bindex_t bindex)
 {
 	IiMustAnyLock(inode);
@@ -388,6 +396,12 @@ static inline void au_set_ibbot(struct inode *inode, aufs_bindex_t bindex)
 {
 	IiMustWriteLock(inode);
 	au_ii(inode)->ii_bbot = bindex;
+}
+
+static inline void au_set_ivdir(struct inode *inode, struct au_vdir *vdir)
+{
+	IiMustWriteLock(inode);
+	au_ii(inode)->ii_vdir = vdir;
 }
 
 static inline struct au_hinode *au_hi(struct inode *inode, aufs_bindex_t bindex)

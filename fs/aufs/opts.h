@@ -19,6 +19,7 @@
 enum {
 	Opt_br,
 	Opt_add,
+	Opt_rdcache, Opt_rdblk, Opt_rdhash,
 	Opt_xino, Opt_noxino,
 	Opt_trunc_xino, Opt_trunc_xino_v,
 	Opt_trunc_xino_path, Opt_itrunc_xino,
@@ -139,6 +140,9 @@ struct au_opt {
 		struct au_opt_xino	xino;
 		struct au_opt_xino_itrunc xino_itrunc;
 		struct au_opt_add	add;
+		int			rdcache;
+		unsigned int		rdblk;
+		unsigned int		rdhash;
 		int			udba;
 		struct au_opt_wbr_create wbr_create;
 		int			wbr_copyup;

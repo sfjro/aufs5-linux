@@ -101,6 +101,10 @@ static int __init au_cache_init(void)
 		au_cache[AuCache_FINFO] = AuCacheCtor(au_finfo,
 						      au_fi_init_once);
 	if (au_cache[AuCache_FINFO])
+		au_cache[AuCache_VDIR] = AuCache(au_vdir);
+	if (au_cache[AuCache_VDIR])
+		au_cache[AuCache_DEHSTR] = AuCache(au_vdir_dehstr);
+	if (au_cache[AuCache_DEHSTR])
 		return 0;
 
 	au_cache_fin();

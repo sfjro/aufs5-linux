@@ -109,6 +109,11 @@ struct au_sbinfo {
 	atomic_t		si_xigen_next;
 #endif
 
+	/* vdir parameters */
+	unsigned long		si_rdcache;	/* max cache time in jiffies */
+	unsigned int		si_rdblk;	/* deblk size */
+	unsigned int		si_rdhash;	/* hash size */
+
 	/* pseudo_link list */
 	struct hlist_bl_head	si_plink[AuPlink_NHASH];
 	wait_queue_head_t	si_plink_wq;
