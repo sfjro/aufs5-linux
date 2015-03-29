@@ -17,6 +17,7 @@ aufs-y := module.o sbinfo.o super.o branch.o xino.o sysaufs.o opts.o fsctx.o \
 	wkq.o vfsub.o dcsub.o \
 	cpup.o whout.o \
 	dinfo.o dentry.o \
+	file.o \
 	dir.o \
 	iinfo.o inode.o i_op.o
 # add more later

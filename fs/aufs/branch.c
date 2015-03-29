@@ -20,6 +20,8 @@ static void au_br_do_free(struct au_branch *br)
 
 	au_xino_put(br);
 
+	AuLCntZero(au_lcnt_read(&br->br_nfiles, /*do_rev*/0));
+	au_lcnt_fin(&br->br_nfiles, /*do_sync*/0);
 	AuLCntZero(au_lcnt_read(&br->br_count, /*do_rev*/0));
 	au_lcnt_fin(&br->br_count, /*do_sync*/0);
 
@@ -37,6 +39,7 @@ static void au_br_do_free(struct au_branch *br)
 	path_put(&br->br_path);
 	lockdep_on();
 	au_kfree_rcu(wbr);
+	au_lcnt_wait_for_fin(&br->br_nfiles);
 	au_lcnt_wait_for_fin(&br->br_count);
 	/* I don't know why, but percpu_refcount requires this */
 	/* synchronize_rcu(); */
@@ -335,6 +338,7 @@ static int au_br_init(struct au_branch *br, struct super_block *sb,
 	err = 0;
 	br->br_perm = add->perm;
 	br->br_path = add->path; /* set first, path_get() later */
+	au_lcnt_init(&br->br_nfiles, /*release*/NULL);
 	au_lcnt_init(&br->br_count, /*release*/NULL);
 	br->br_id = au_new_br_id(sb);
 	AuDebugOn(br->br_id < 0);

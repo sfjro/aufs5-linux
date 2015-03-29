@@ -27,6 +27,7 @@
 #include "dcsub.h"
 #include "dentry.h"
 #include "dir.h"
+#include "file.h"
 #include "fstype.h"
 #include "hbl.h"
 #include "inode.h"

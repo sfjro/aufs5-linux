@@ -108,6 +108,8 @@ static inline void au_nlink_unlock(struct inode *inode)
 
 /* inode.c */
 struct inode *au_igrab(struct inode *inode);
+int au_test_ro(struct super_block *sb, aufs_bindex_t bindex,
+	       struct inode *inode);
 int au_test_h_perm(struct mnt_idmap *h_idmap, struct inode *h_inode,
 		   int mask);
 int au_test_h_perm_sio(struct mnt_idmap *h_idmap, struct inode *h_inode,
