@@ -445,9 +445,76 @@ int au_pin(struct au_pin *pin, struct dentry *dentry, aufs_bindex_t bindex,
 
 /* ---------------------------------------------------------------------- */
 
+static const char *aufs_get_link(struct dentry *dentry, struct inode *inode,
+				 struct delayed_call *done)
+{
+	const char *ret;
+	struct dentry *h_dentry;
+	struct inode *h_inode;
+	int err;
+	aufs_bindex_t bindex;
+
+	ret = NULL; /* suppress a warning */
+	err = -ECHILD;
+	if (!dentry)
+		goto out;
+
+	err = aufs_read_lock(dentry, AuLock_IR | AuLock_GEN);
+	if (unlikely(err))
+		goto out;
+
+	err = au_d_hashed_positive(dentry);
+	if (unlikely(err))
+		goto out_unlock;
+
+	err = -EINVAL;
+	inode = d_inode(dentry);
+	bindex = au_ibtop(inode);
+	h_inode = au_h_iptr(inode, bindex);
+	if (unlikely(!h_inode->i_op->get_link))
+		goto out_unlock;
+
+	err = -EBUSY;
+	h_dentry = NULL;
+	if (au_dbtop(dentry) <= bindex) {
+		h_dentry = au_h_dptr(dentry, bindex);
+		if (h_dentry)
+			dget(h_dentry);
+	}
+	if (!h_dentry) {
+		h_dentry = d_find_any_alias(h_inode);
+		if (IS_ERR(h_dentry)) {
+			err = PTR_ERR(h_dentry);
+			goto out_unlock;
+		}
+	}
+	if (unlikely(!h_dentry))
+		goto out_unlock;
+
+	err = 0;
+	AuDbg("%ps\n", h_inode->i_op->get_link);
+	AuDbgDentry(h_dentry);
+	ret = vfs_get_link(h_dentry, done);
+	dput(h_dentry);
+	if (IS_ERR(ret))
+		err = PTR_ERR(ret);
+
+out_unlock:
+	aufs_read_unlock(dentry, AuLock_IR);
+out:
+	if (unlikely(err))
+		ret = ERR_PTR(err);
+	AuTraceErrPtr(ret);
+	return ret;
+}
+
+/* ---------------------------------------------------------------------- */
+
 struct inode_operations aufs_iop[] = {
 	[AuIop_SYMLINK] = {
-		.permission	= aufs_permission
+		.permission	= aufs_permission,
+
+		.get_link	= aufs_get_link
 	},
 	[AuIop_DIR] = {
 		.lookup		= aufs_lookup,

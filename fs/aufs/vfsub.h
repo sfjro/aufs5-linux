@@ -174,6 +174,18 @@ static inline int vfsub_file_execed(struct file *file)
 	return !!(vfsub_file_flags(file) & __FMODE_EXEC);
 }
 
+#if 0 /* reserved */
+static inline void vfsub_touch_atime(struct vfsmount *h_mnt,
+				     struct dentry *h_dentry)
+{
+	struct path h_path = {
+		.dentry	= h_dentry,
+		.mnt	= h_mnt
+	};
+	touch_atime(&h_path);
+}
+#endif
+
 /*
  * re-use branch fs's ioctl(FICLONE) while aufs itself doesn't support such
  * ioctl.
