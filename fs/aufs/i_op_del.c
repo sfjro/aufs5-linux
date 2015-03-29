@@ -358,6 +358,8 @@ int aufs_unlink(struct inode *dir, struct dentry *dentry)
 
 		/* update target timestamps */
 		if (bindex == btop) {
+			vfsub_update_h_iattr(&a->h_path, /*did*/NULL);
+			/*ignore*/
 			h_inode = d_inode(a->h_path.dentry);
 			inode_set_ctime_to_ts(inode, inode_get_ctime(h_inode));
 		} else

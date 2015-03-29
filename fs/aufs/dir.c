@@ -258,6 +258,9 @@ static int do_open_dir(struct file *file, int flags, struct file *h_file)
 		if (!h_dentry)
 			continue;
 
+		err = vfsub_test_mntns(mnt, h_dentry->d_sb);
+		if (unlikely(err))
+			break;
 		h_file = au_h_open(dentry, bindex, flags, file, /*force_wr*/0);
 		if (IS_ERR(h_file)) {
 			err = PTR_ERR(h_file);
