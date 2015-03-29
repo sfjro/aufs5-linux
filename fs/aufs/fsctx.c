@@ -19,6 +19,96 @@ struct au_fsctx_opts {
 	struct au_opts opts;
 };
 
+/* stop extra interpretation of errno in mount(8), and strange error messages */
+static int cvt_err(int err)
+{
+	AuTraceErr(err);
+
+	switch (err) {
+	case -ENOENT:
+	case -ENOTDIR:
+	case -EEXIST:
+	case -EIO:
+		err = -EINVAL;
+	}
+	return err;
+}
+
+/* ---------------------------------------------------------------------- */
+
+/* remove later */
+static const struct dentry_operations dummy_dentry_operations = {
+	.d_delete = always_delete_dentry,
+};
+
+static int au_fsctx_fill_super(struct super_block *sb, struct fs_context *fc)
+{
+	int err;
+	struct au_fsctx_opts *a = fc->fs_private;
+	struct au_sbinfo *sbinfo = a->sbinfo;
+	struct dentry *root;
+	struct inode *inode;
+
+	sbinfo->si_sb = sb;
+	sb->s_fs_info = sbinfo;
+	kobject_get(&sbinfo->si_kobj);
+
+	__si_write_lock(sb);
+	si_pid_set(sb);
+	au_sbilist_add(sb);
+
+	/* all timestamps always follow the ones on the branch */
+	sb->s_flags |= SB_NOATIME | SB_NODIRATIME | SB_I_VERSION;
+	sb->s_op = &aufs_sop;
+	set_default_d_op(sb, &dummy_dentry_operations); /* replace later */
+	sb->s_magic = AUFS_SUPER_MAGIC;
+	sb->s_maxbytes = 0;
+	sb->s_stack_depth = 1;
+	au_export_init(sb);
+
+	err = au_alloc_root(sb);
+	if (unlikely(err)) {
+		si_write_unlock(sb);
+		goto out;
+	}
+	root = sb->s_root;
+	inode = d_inode(root);
+	ii_write_lock_parent(inode);
+	aufs_write_unlock(root);
+
+	/* lock vfs_inode first, then aufs. */
+	inode_lock(inode);
+	aufs_write_lock(root);
+	err = au_opts_mount(sb, &a->opts);
+	AuTraceErr(err);
+	aufs_write_unlock(root);
+	inode_unlock(inode);
+	if (!err)
+		goto out; /* success */
+
+	dput(root);
+	sb->s_root = NULL;
+
+out:
+	if (unlikely(err))
+		kobject_put(&sbinfo->si_kobj);
+	AuTraceErr(err);
+	err = cvt_err(err);
+	AuTraceErr(err);
+	return err;
+}
+
+static int au_fsctx_get_tree(struct fs_context *fc)
+{
+	int err;
+
+	AuDbg("fc %p\n", fc);
+	err = get_tree_nodev(fc, au_fsctx_fill_super);
+
+	AuTraceErr(err);
+	return err;
+}
+
 /* ---------------------------------------------------------------------- */
 
 static void au_fsctx_dump(struct au_opts *opts)
@@ -313,8 +403,7 @@ int au_fsctx_parse_xino_itrunc_path(struct fs_context *fc,
 
 	xino_itrunc->bindex = -1;
 	root = a->sb->s_root;
-	si_read_lock(a->sb, AuLock_FLUSH);
-	di_read_lock_child(root, /*flags*/0);
+	aufs_read_lock(root, AuLock_FLUSH);
 	bbot = au_sbbot(a->sb);
 	for (bindex = 0; bindex <= bbot; bindex++) {
 		if (au_h_dptr(root, bindex) == path.dentry) {
@@ -322,8 +411,7 @@ int au_fsctx_parse_xino_itrunc_path(struct fs_context *fc,
 			break;
 		}
 	}
-	di_read_unlock(root, /*flags*/0);
-	si_read_unlock(a->sb);
+	aufs_read_unlock(root, !AuLock_IR);
 	path_put(&path);
 
 	if (unlikely(xino_itrunc->bindex < 0)) {
@@ -586,8 +674,55 @@ static const struct fs_context_operations au_fsctx_ops = {
 	.free			= au_fsctx_free,
 	.parse_param		= au_fsctx_parse_param,
 	.parse_monolithic	= au_fsctx_parse_monolithic,
+	.get_tree		= au_fsctx_get_tree
 	/*
 	 * nfs4 requires ->dup()? No.
 	 * I don't know what is this ->dup() for.
 	 */
 };
+
+int aufs_fsctx_init(struct fs_context *fc)
+{
+	int err;
+	struct au_fsctx_opts *a;
+
+	/* fs_type=%p, root=%pD */
+	AuDbg("fc %p{sb_flags 0x%x, sb_flags_mask 0x%x, purpose %u\n",
+	      fc, fc->sb_flags, fc->sb_flags_mask, fc->purpose);
+
+	/* they will be freed by au_fsctx_free() */
+	err = -ENOMEM;
+	a = kzalloc(sizeof(*a), GFP_NOFS);
+	if (unlikely(!a))
+		goto out;
+	a->bindex = 0;
+	a->opts.opt = (void *)__get_free_page(GFP_NOFS);
+	if (unlikely(!a->opts.opt))
+		goto out_a;
+	a->opt = a->opts.opt;
+	a->opt->type = Opt_tail;
+	a->opts.max_opt = PAGE_SIZE / sizeof(*a->opts.opt);
+	a->opt_tail = a->opt + a->opts.max_opt - 1;
+	a->opts.sb_flags = fc->sb_flags;
+
+	a->sb = NULL;
+	a->sbinfo = au_si_alloc(a->sb);
+	AuDebugOn(!a->sbinfo);
+	err = PTR_ERR(a->sbinfo);
+	if (IS_ERR(a->sbinfo))
+		goto out_opt;
+	au_rw_write_unlock(&a->sbinfo->si_rwsem);
+
+	err = 0;
+	fc->fs_private = a;
+	fc->ops = &au_fsctx_ops;
+	goto out; /* success */
+
+out_opt:
+	free_page((unsigned long)a->opts.opt);
+out_a:
+	au_kfree_rcu(a);
+out:
+	AuTraceErr(err);
+	return err;
+}

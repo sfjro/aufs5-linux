@@ -61,8 +61,7 @@ static void au_do_dir_ts(void *arg)
 	if (d_really_is_negative(a->dentry))
 		goto out;
 	/* no dir->i_mutex lock */
-	si_read_lock(sb, /*flags*/0); /* noflush */
-	di_write_lock(a->dentry, AuLsc_DI_CHILD);
+	aufs_read_lock(a->dentry, AuLock_DW); /* noflush */
 
 	dir = d_inode(a->dentry);
 	btop = au_ibtop(dir);
@@ -99,8 +98,7 @@ static void au_do_dir_ts(void *arg)
 	au_cpup_attr_timesizes(dir);
 
 out_unlock:
-	di_write_unlock(a->dentry);
-	si_read_unlock(sb);
+	aufs_read_unlock(a->dentry, AuLock_DW);
 out:
 	dput(a->dentry);
 	au_nwt_done(&au_sbi(sb)->si_nowait);
