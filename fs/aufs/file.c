@@ -106,6 +106,216 @@ out:
 	return err;
 }
 
+int au_reopen_nondir(struct file *file)
+{
+	int err;
+	aufs_bindex_t btop;
+	struct dentry *dentry;
+	struct au_branch *br;
+	struct file *h_file, *h_file_tmp;
+
+	dentry = file->f_path.dentry;
+	btop = au_dbtop(dentry);
+	br = au_sbr(dentry->d_sb, btop);
+	h_file_tmp = NULL;
+	if (au_fbtop(file) == btop) {
+		h_file = au_hf_top(file);
+		if (file->f_mode == h_file->f_mode)
+			return 0; /* success */
+		h_file_tmp = h_file;
+		get_file(h_file_tmp);
+		au_lcnt_inc(&br->br_nfiles);
+		au_set_h_fptr(file, btop, NULL);
+	}
+	AuDebugOn(au_fi(file)->fi_hdir);
+	/*
+	 * it can happen
+	 * file exists on both of rw and ro
+	 * open --> dbtop and fbtop are both 0
+	 * prepend a branch as rw, "rw" become ro
+	 * remove rw/file
+	 * delete the top branch, "rw" becomes rw again
+	 *	--> dbtop is 1, fbtop is still 0
+	 * write --> fbtop is 0 but dbtop is 1
+	 */
+	/* AuDebugOn(au_fbtop(file) < btop); */
+
+	h_file = au_h_open(dentry, btop, vfsub_file_flags(file) & ~O_TRUNC,
+			   file);
+	err = PTR_ERR(h_file);
+	if (IS_ERR(h_file)) {
+		if (h_file_tmp) {
+			/* revert */
+			au_set_h_fptr(file, btop, h_file_tmp);
+			h_file_tmp = NULL;
+		}
+		goto out; /* todo: close all? */
+	}
+
+	err = 0;
+	au_set_fbtop(file, btop);
+	au_set_h_fptr(file, btop, h_file);
+	au_update_figen(file);
+	file->f_mode |= h_file->f_mode & FMODE_CAN_ODIRECT;
+	/* todo: necessary? */
+	/* file->f_ra = h_file->f_ra; */
+
+out:
+	if (h_file_tmp) {
+		fput(h_file_tmp);
+		au_lcnt_dec(&br->br_nfiles);
+	}
+	return err;
+}
+
+/* ---------------------------------------------------------------------- */
+
+static int au_reopen_wh(struct file *file, aufs_bindex_t btgt,
+			struct dentry *hi_wh)
+{
+	int err;
+	aufs_bindex_t btop;
+	struct au_dinfo *dinfo;
+	struct dentry *h_dentry;
+	struct au_hdentry *hdp;
+
+	dinfo = au_di(file->f_path.dentry);
+	AuRwMustWriteLock(&dinfo->di_rwsem);
+
+	btop = dinfo->di_btop;
+	dinfo->di_btop = btgt;
+	hdp = au_hdentry(dinfo, btgt);
+	h_dentry = hdp->hd_dentry;
+	hdp->hd_dentry = hi_wh;
+	err = au_reopen_nondir(file);
+	hdp->hd_dentry = h_dentry;
+	dinfo->di_btop = btop;
+
+	return err;
+}
+
+static int au_ready_to_write_wh(struct file *file, loff_t len,
+				aufs_bindex_t bcpup, struct au_pin *pin)
+{
+	int err;
+	struct inode *inode, *h_inode;
+	struct dentry *h_dentry, *hi_wh;
+	struct au_cp_generic cpg = {
+		.dentry	= file->f_path.dentry,
+		.bdst	= bcpup,
+		.bsrc	= -1,
+		.len	= len,
+		.pin	= pin
+	};
+
+	au_update_dbtop(cpg.dentry);
+	inode = d_inode(cpg.dentry);
+	h_inode = NULL;
+	if (au_dbtop(cpg.dentry) <= bcpup
+	    && au_dbbot(cpg.dentry) >= bcpup) {
+		h_dentry = au_h_dptr(cpg.dentry, bcpup);
+		if (h_dentry && d_is_positive(h_dentry))
+			h_inode = d_inode(h_dentry);
+	}
+	hi_wh = au_hi_wh(inode, bcpup);
+	if (!hi_wh && !h_inode)
+		err = au_sio_cpup_wh(&cpg, file);
+	else
+		/* already copied-up after unlink */
+		err = au_reopen_wh(file, bcpup, hi_wh);
+
+	if (!err
+	    && (vfsub_inode_nlink(inode, AU_I_AUFS) > 1
+		|| au_ii(inode)->ii_tmpfile)
+	    && au_opt_test(au_mntflags(cpg.dentry->d_sb), PLINK))
+		au_plink_append(inode, bcpup, au_h_dptr(cpg.dentry, bcpup));
+
+	return err;
+}
+
+/*
+ * prepare the @file for writing.
+ */
+int au_ready_to_write(struct file *file, loff_t len, struct au_pin *pin)
+{
+	int err;
+	aufs_bindex_t dbtop;
+	struct dentry *parent;
+	struct inode *inode;
+	struct super_block *sb;
+	struct au_cp_generic cpg = {
+		.dentry	= file->f_path.dentry,
+		.bdst	= -1,
+		.bsrc	= -1,
+		.len	= len,
+		.pin	= pin,
+		.flags	= AuCpup_DTIME
+	};
+
+	sb = cpg.dentry->d_sb;
+	inode = d_inode(cpg.dentry);
+	cpg.bsrc = au_fbtop(file);
+	err = au_test_ro(sb, cpg.bsrc, inode);
+	if (!err && (au_hf_top(file)->f_mode & FMODE_WRITE)) {
+		err = au_pin(pin, cpg.dentry, cpg.bsrc, AuOpt_UDBA_NONE,
+			     /*flags*/0);
+		goto out;
+	}
+
+	/* need to cpup or reopen */
+	parent = dget_parent(cpg.dentry);
+	di_write_lock_parent(parent);
+	err = AuWbrCopyup(au_sbi(sb), cpg.dentry);
+	cpg.bdst = err;
+	if (unlikely(err < 0))
+		goto out_dgrade;
+	err = 0;
+
+	if (!d_unhashed(cpg.dentry) && !au_h_dptr(parent, cpg.bdst)) {
+		err = au_cpup_dirs(cpg.dentry, cpg.bdst);
+		if (unlikely(err))
+			goto out_dgrade;
+	}
+
+	err = au_pin(pin, cpg.dentry, cpg.bdst, AuOpt_UDBA_NONE,
+		     AuPin_DI_LOCKED | AuPin_MNT_WRITE);
+	if (unlikely(err))
+		goto out_dgrade;
+
+	dbtop = au_dbtop(cpg.dentry);
+	if (dbtop <= cpg.bdst)
+		cpg.bsrc = cpg.bdst;
+
+	if (dbtop <= cpg.bdst		/* just reopen */
+	    || !d_unhashed(cpg.dentry)	/* copyup and reopen */
+		) {
+		di_downgrade_lock(parent, AuLock_IR);
+		if (dbtop > cpg.bdst)
+			err = au_sio_cpup_simple(&cpg);
+		if (!err)
+			err = au_reopen_nondir(file);
+	} else {			/* copyup as wh and reopen */
+		err = au_ready_to_write_wh(file, len, cpg.bdst, pin);
+		di_downgrade_lock(parent, AuLock_IR);
+	}
+
+	if (!err) {
+		au_pin_set_parent_lflag(pin, /*lflag*/0);
+		goto out_dput; /* success */
+	}
+	au_unpin(pin);
+	goto out_unlock;
+
+out_dgrade:
+	di_downgrade_lock(parent, AuLock_IR);
+out_unlock:
+	di_read_unlock(parent, AuLock_IR);
+out_dput:
+	dput(parent);
+out:
+	return err;
+}
+
 /* ---------------------------------------------------------------------- */
 
 static int au_file_refresh_by_inode(struct file *file, int *need_reopen)
@@ -113,7 +323,7 @@ static int au_file_refresh_by_inode(struct file *file, int *need_reopen)
 	int err;
 	struct au_pin pin;
 	struct au_finfo *finfo;
-	struct dentry *parent;
+	struct dentry *parent, *hi_wh;
 	struct inode *inode;
 	struct super_block *sb;
 	struct au_cp_generic cpg = {
@@ -147,6 +357,7 @@ static int au_file_refresh_by_inode(struct file *file, int *need_reopen)
 	}
 
 	di_read_lock_parent(parent, AuLock_IR);
+	hi_wh = au_hi_wh(inode, cpg.bdst);
 	if (!S_ISDIR(inode->i_mode)
 	    && au_opt_test(au_mntflags(sb), PLINK)
 	    && au_plink_test(inode)
@@ -163,6 +374,10 @@ static int au_file_refresh_by_inode(struct file *file, int *need_reopen)
 			err = au_sio_cpup_simple(&cpg);
 			au_unpin(&pin);
 		}
+	} else if (hi_wh) {
+		/* already copied-up after unlink */
+		err = au_reopen_wh(file, cpg.bdst, hi_wh);
+		*need_reopen = 0;
 	}
 
 out_unlock:
