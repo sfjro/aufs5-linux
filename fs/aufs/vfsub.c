@@ -107,6 +107,56 @@ out:
 
 /* ---------------------------------------------------------------------- */
 
+static int au_test_nlink(struct inode *inode)
+{
+	const unsigned int link_max = UINT_MAX >> 1; /* rough margin */
+
+	if (!au_test_fs_no_limit_nlink(inode->i_sb)
+	    || vfsub_inode_nlink(inode, AU_I_BRANCH) < link_max)
+		return 0;
+	return -EMLINK;
+}
+
+int vfsub_link(struct dentry *src_dentry, struct inode *dir, struct path *path)
+{
+	int err, e;
+	struct dentry *d;
+	struct mnt_idmap *idmap;
+	struct delegated_inode deleg = {};
+
+	IMustLock(dir);
+
+	err = au_test_nlink(d_inode(src_dentry));
+	if (unlikely(err))
+		return err;
+
+	/* we don't call may_linkat() */
+	d = path->dentry;
+	path->dentry = d->d_parent;
+	err = security_path_link(src_dentry, path, d);
+	path->dentry = d;
+	if (unlikely(err))
+		goto out;
+
+	idmap = mnt_idmap(path->mnt);
+	do {
+		lockdep_off();
+		err = vfs_link(src_dentry, idmap, dir, path->dentry, &deleg);
+		lockdep_on();
+		if (is_delegated(&deleg)) {
+			e = break_deleg_wait(&deleg);
+			if (!e)
+				continue;
+		}
+		break;
+	} while (1);
+
+out:
+	return err;
+}
+
+/* ---------------------------------------------------------------------- */
+
 /* todo: support mmap_sem? */
 ssize_t vfsub_read_u(struct file *file, char __user *ubuf, size_t count,
 		     loff_t *ppos)

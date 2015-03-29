@@ -204,6 +204,20 @@ static int au_opt_simple(struct super_block *sb, struct au_opt *opt,
 	err = 1; /* handled */
 	sbinfo = au_sbi(sb);
 	switch (opt->type) {
+	case Opt_plink:
+		if (opt->tf)
+			au_opt_set(sbinfo->si_mntflags, PLINK);
+		else {
+			if (au_opt_test(sbinfo->si_mntflags, PLINK))
+				au_plink_put(sb, /*verbose*/1);
+			au_opt_clr(sbinfo->si_mntflags, PLINK);
+		}
+		break;
+	case Opt_list_plink:
+		if (au_opt_test(sbinfo->si_mntflags, PLINK))
+			au_plink_list(sb);
+		break;
+
 	case Opt_trunc_xino:
 		if (opt->tf)
 			au_opt_set(sbinfo->si_mntflags, TRUNC_XINO);

@@ -17,6 +17,12 @@
 #include "rwsem.h"
 #include "wkq.h"
 
+#define AuPlink_NHASH 100
+static inline int au_plink_hash(ino_t ino)
+{
+	return ino % AuPlink_NHASH;
+}
+
 struct au_branch;
 struct au_sbinfo {
 	/* nowait tasks in the system-wide workqueue */
@@ -56,6 +62,12 @@ struct au_sbinfo {
 	/* reserved for future use */
 	/* unsigned long long	si_xib_limit; */	/* Max xib file size */
 
+	/* pseudo_link list */
+	struct hlist_bl_head	si_plink[AuPlink_NHASH];
+	wait_queue_head_t	si_plink_wq;
+	spinlock_t		si_plink_maint_lock;
+	pid_t			si_plink_maint_pid;
+
 	/*
 	 * sysfs and lifetime management.
 	 * this is not a small structure and it may be a waste of memory in case
@@ -79,6 +91,8 @@ struct au_sbinfo {
 #define AuLock_IR		BIT(1)		/* read-lock inode */
 #define AuLock_IW		BIT(2)		/* write-lock inode */
 #define AuLock_FLUSH		BIT(3)		/* wait for 'nowait' tasks */
+#define AuLock_NOPLM		BIT(5)		/* return err in plm mode */
+#define AuLock_NOPLMW		BIT(6)		/* wait for plm mode ends */
 #define au_ftest_lock(flags, name)	((flags) & AuLock_##name)
 #define au_fset_lock(flags, name) \
 	do { (flags) |= AuLock_##name; } while (0)
