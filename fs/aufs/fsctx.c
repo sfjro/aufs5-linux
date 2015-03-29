@@ -251,6 +251,7 @@ static void au_fsctx_dump(struct au_opts *opts)
 		au_fsctx_TF(plink);
 		au_fsctx_TF(dio);
 		au_fsctx_TF(verbose);
+		au_fsctx_TF(sum);
 		au_fsctx_TF(acl);
 #undef au_fsctx_TF
 
@@ -270,6 +271,9 @@ static void au_fsctx_dump(struct au_opts *opts)
 		case Opt_udba:
 			AuDbg("udba %d, %s\n",
 				  opt->udba, au_optstr_udba(opt->udba));
+			break;
+		case Opt_wsum:
+			AuLabel(wsum);
 			break;
 		case Opt_wbr_create:
 			u.create = &opt->wbr_create;
@@ -370,6 +374,9 @@ const struct fs_parameter_spec aufs_fsctx_paramspec[] = {
 	fsparam_flag("q", Opt_noverbose),
 	/* user-space may handle this */
 	fsparam_flag("silent", Opt_noverbose),
+
+	fsparam_flag_no("sum", Opt_sum),
+	fsparam_flag("wsum", Opt_wsum),
 
 	fsparam_s32("rdcache", Opt_rdcache),
 	/* "def" or s32 */
@@ -917,6 +924,7 @@ static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *para
 	au_fsctx_TF(plink);
 	au_fsctx_TF(dio);
 	au_fsctx_TF(verbose);
+	au_fsctx_TF(sum);
 	au_fsctx_TF(acl);
 #undef au_fsctx_TF
 
@@ -929,6 +937,8 @@ static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *para
 	case Opt_noxino:
 		fallthrough;
 	case Opt_list_plink:
+		fallthrough;
+	case Opt_wsum:
 		err = 0;
 		break;
 

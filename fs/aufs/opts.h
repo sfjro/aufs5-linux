@@ -30,6 +30,7 @@ enum {
 	Opt_dio,
 	Opt_wbr_copyup, Opt_wbr_create,
 	Opt_verbose, Opt_noverbose,
+	Opt_sum, Opt_wsum,
 	Opt_dirperm1,
 	Opt_acl,
 	Opt_tail, Opt_ignore, Opt_ignore_silent, Opt_err
@@ -47,6 +48,8 @@ enum {
 #define AuOpt_PLINK		BIT(6)		/* pseudo-link */
 #define AuOpt_DIRPERM1		BIT(7)		/* ignore the lower dir's perm
 						   bits */
+#define AuOpt_SUM		BIT(9)		/* summation for statfs(2) */
+#define AuOpt_SUM_W		BIT(10)		/* unimplemented */
 #define AuOpt_VERBOSE		BIT(12)		/* print the cause of error */
 #define AuOpt_DIO		BIT(13)		/* direct io */
 
