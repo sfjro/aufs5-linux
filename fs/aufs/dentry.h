@@ -50,6 +50,7 @@ struct au_do_lookup_args {
 /* ---------------------------------------------------------------------- */
 
 /* dentry.c */
+extern const struct dentry_operations aufs_dop;
 struct au_branch;
 struct dentry *au_sio_lkup_one(struct mnt_idmap *idmap, const struct qstr *name,
 			       struct path *ppath);

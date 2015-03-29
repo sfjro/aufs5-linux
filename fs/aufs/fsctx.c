@@ -88,11 +88,6 @@ out:
 
 /* ---------------------------------------------------------------------- */
 
-/* remove later */
-static const struct dentry_operations dummy_dentry_operations = {
-	.d_delete = always_delete_dentry,
-};
-
 static int au_fsctx_fill_super(struct super_block *sb, struct fs_context *fc)
 {
 	int err;
@@ -112,7 +107,7 @@ static int au_fsctx_fill_super(struct super_block *sb, struct fs_context *fc)
 	/* all timestamps always follow the ones on the branch */
 	sb->s_flags |= SB_NOATIME | SB_NODIRATIME | SB_I_VERSION;
 	sb->s_op = &aufs_sop;
-	set_default_d_op(sb, &dummy_dentry_operations); /* replace later */
+	set_default_d_op(sb, &aufs_dop);
 	sb->s_magic = AUFS_SUPER_MAGIC;
 	sb->s_maxbytes = 0;
 	sb->s_stack_depth = 1;
