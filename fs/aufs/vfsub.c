@@ -9,6 +9,7 @@
 
 #include <linux/filelock.h>
 #include <linux/namei.h>
+#include <linux/splice.h>
 #include "aufs.h"
 
 int vfsub_sync_filesystem(struct super_block *h_sb)
@@ -498,6 +499,23 @@ ssize_t vfsub_write_k(struct file *file, void *kbuf, size_t count, loff_t *ppos)
 	return err;
 }
 
+int vfsub_flush(struct file *file, fl_owner_t id)
+{
+	int err;
+
+	err = 0;
+	if (file->f_op->flush) {
+		if (!au_test_nfs(file->f_path.dentry->d_sb))
+			err = file->f_op->flush(file, id);
+		else {
+			lockdep_off();
+			err = file->f_op->flush(file, id);
+			lockdep_on();
+		}
+	}
+	return err;
+}
+
 int vfsub_iterate_dir(struct file *file, struct dir_context *ctx)
 {
 	int err;
@@ -508,6 +526,74 @@ int vfsub_iterate_dir(struct file *file, struct dir_context *ctx)
 	err = iterate_dir(file, ctx);
 	lockdep_on();
 
+	return err;
+}
+
+ssize_t vfsub_splice_read(struct file *in, loff_t *ppos,
+			  struct pipe_inode_info *pipe, size_t len,
+			  unsigned int flags)
+{
+	ssize_t err;
+
+	lockdep_off();
+	err = vfs_splice_read(in, ppos, pipe, len, flags);
+	lockdep_on();
+	file_accessed(in);
+	return err;
+}
+
+ssize_t vfsub_splice_from(struct pipe_inode_info *pipe, struct file *out,
+			  loff_t *ppos, size_t len, unsigned int flags)
+{
+	ssize_t err;
+
+	lockdep_off();
+	err = do_splice_from(pipe, out, ppos, len, flags);
+	lockdep_on();
+	return err;
+}
+
+int vfsub_fsync(struct file *file, const struct path *path, int datasync)
+{
+	int err;
+
+	/* file can be NULL */
+	lockdep_off();
+	err = vfs_fsync(file, datasync);
+	lockdep_on();
+	return err;
+}
+
+/* cf. open.c:do_sys_truncate() and do_sys_ftruncate() */
+int vfsub_trunc(const struct path *h_path, loff_t length, unsigned int attr,
+		struct file *h_file)
+{
+	int err;
+	struct inode *h_inode;
+	struct super_block *h_sb;
+	struct mnt_idmap *h_idmap;
+
+	if (!h_file) {
+		err = vfsub_truncate(h_path, length);
+		goto out;
+	}
+
+	err = security_file_truncate(h_file);
+	if (err)
+		goto out;
+	err = fsnotify_truncate_perm(&h_file->f_path, length);
+	if (err)
+		goto out;
+	h_idmap = mnt_idmap(h_path->mnt);
+	h_inode = d_inode(h_path->dentry);
+	h_sb = h_inode->i_sb;
+	lockdep_off();
+	scoped_guard(super_write, h_sb)
+		err = do_truncate(h_idmap, h_path->dentry, length, attr,
+				  h_file);
+	lockdep_on();
+
+out:
 	return err;
 }
 

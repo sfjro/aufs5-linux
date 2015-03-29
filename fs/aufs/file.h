@@ -73,11 +73,14 @@ struct au_pin;
 int au_ready_to_write(struct file *file, loff_t len, struct au_pin *pin);
 int au_reval_and_lock_fdi(struct file *file, int (*reopen)(struct file *file),
 			  int wlock, unsigned int fi_lsc);
+int au_do_flush(struct file *file, fl_owner_t id,
+		int (*flush)(struct file *file, fl_owner_t id));
 
 /* f_op.c */
 extern const struct file_operations aufs_file_fop;
 int au_do_open_nondir(struct file *file, int flags);
 int aufs_release_nondir(struct inode *inode __maybe_unused, struct file *file);
+struct file *au_read_pre(struct file *file, int keep_fi, unsigned int lsc);
 
 /* mf.c */
 void au_mf_add(struct file *h_file, struct file *file);
