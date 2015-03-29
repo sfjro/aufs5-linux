@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include "debug.h"
 #include "dentry.h"
+#include "file.h"
 #include "inode.h"
 
 struct path;
@@ -104,6 +105,7 @@ AuStubVoid(au_procfs_fin, void);
 enum {
 	AuCache_DINFO,
 	AuCache_ICNTNR,
+	AuCache_FINFO,
 	AuCache_HNOTIFY, /* must be last */
 	AuCache_Last
 };
@@ -142,6 +144,9 @@ AuCacheFuncAlloc(dinfo, DINFO);
 AuCacheFuncs(icntnr, ICNTNR);
 static inline struct au_icntnr *au_cache_alloc_icntnr(struct super_block *sb)
 { return alloc_inode_sb(sb, au_cache[AuCache_ICNTNR], GFP_NOFS); }
+
+AuCacheFuncs(finfo, FINFO);
+AuCacheFuncAlloc(finfo, FINFO);
 
 #ifdef CONFIG_AUFS_HNOTIFY
 AuCacheFuncs(hnotify, HNOTIFY);

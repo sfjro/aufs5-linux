@@ -98,6 +98,9 @@ static int __init au_cache_init(void)
 		au_cache[AuCache_ICNTNR] = AuCacheCtor(au_icntnr,
 						       au_icntnr_init_once);
 	if (au_cache[AuCache_ICNTNR])
+		au_cache[AuCache_FINFO] = AuCacheCtor(au_finfo,
+						      au_fi_init_once);
+	if (au_cache[AuCache_FINFO])
 		return 0;
 
 	au_cache_fin();
