@@ -214,9 +214,7 @@ static int set_inode(struct inode *inode, struct dentry *dentry)
 	case S_IFREG:
 		btail = au_dbtail(dentry);
 		inode->i_op = iop + AuIop_OTHER;
-#if 0 /* re-commit later */
 		inode->i_fop = &aufs_file_fop;
-#endif
 		err = au_dy_iaop(inode, btop, h_inode);
 		if (unlikely(err))
 			goto out;
