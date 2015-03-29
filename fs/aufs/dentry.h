@@ -24,7 +24,7 @@ struct au_dinfo {
 	atomic_t		di_generation;
 
 	struct au_rwsem		di_rwsem;
-	aufs_bindex_t		di_btop, di_bbot, di_bwh;
+	aufs_bindex_t		di_btop, di_bbot, di_bwh, di_bdiropq;
 	struct au_hdentry	*di_hdentry;
 	struct rcu_head		rcu;
 } ____cacheline_aligned_in_smp;
@@ -46,6 +46,8 @@ void di_write_lock(struct dentry *d, unsigned int lsc);
 void di_write_unlock(struct dentry *d);
 
 struct dentry *au_h_dptr(struct dentry *dentry, aufs_bindex_t bindex);
+aufs_bindex_t au_dbtail(struct dentry *dentry);
+aufs_bindex_t au_dbtaildir(struct dentry *dentry);
 
 void au_set_h_dptr(struct dentry *dentry, aufs_bindex_t bindex,
 		   struct dentry *h_dentry);
@@ -153,6 +155,12 @@ static inline aufs_bindex_t au_dbwh(struct dentry *dentry)
 	return au_di(dentry)->di_bwh;
 }
 
+static inline aufs_bindex_t au_dbdiropq(struct dentry *dentry)
+{
+	DiMustAnyLock(dentry);
+	return au_di(dentry)->di_bdiropq;
+}
+
 /* todo: hard/soft set? */
 static inline void au_set_dbtop(struct dentry *dentry, aufs_bindex_t bindex)
 {
@@ -171,6 +179,12 @@ static inline void au_set_dbwh(struct dentry *dentry, aufs_bindex_t bindex)
 	DiMustWriteLock(dentry);
 	/* dbwh can be outside of btop - bbot range */
 	au_di(dentry)->di_bwh = bindex;
+}
+
+static inline void au_set_dbdiropq(struct dentry *dentry, aufs_bindex_t bindex)
+{
+	DiMustWriteLock(dentry);
+	au_di(dentry)->di_bdiropq = bindex;
 }
 
 #endif /* __KERNEL__ */
