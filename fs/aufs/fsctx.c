@@ -34,6 +34,58 @@ static int cvt_err(int err)
 	return err;
 }
 
+static int au_fsctx_reconfigure(struct fs_context *fc)
+{
+	int err, do_dx;
+	unsigned int mntflags;
+	struct dentry *root;
+	struct super_block *sb;
+	struct inode *inode;
+	struct au_fsctx_opts *a = fc->fs_private;
+
+	AuDbg("fc %p\n", fc);
+
+	root = fc->root;
+	sb = root->d_sb;
+	root = sb->s_root; /* "bind"-mount may give us non-root */
+	AuDebugOn(!IS_ROOT(root));
+	err = si_write_lock(sb, AuLock_FLUSH | AuLock_NOPLM);
+	if (!err) {
+		di_write_lock_child(root);
+		err = au_opts_verify(sb, fc->sb_flags, /*pending*/0);
+		aufs_write_unlock(root);
+	}
+
+	inode = d_inode(root);
+	inode_lock(inode);
+	err = si_write_lock(sb, AuLock_FLUSH | AuLock_NOPLM);
+	if (unlikely(err))
+		goto out;
+	di_write_lock_child(root);
+
+	/* au_opts_remount() may return an error */
+	err = au_opts_remount(sb, &a->opts);
+
+	if (au_ftest_opts(a->opts.flags, REFRESH))
+		au_remount_refresh(sb);
+
+	if (au_ftest_opts(a->opts.flags, REFRESH_DYAOP)) {
+		mntflags = au_mntflags(sb);
+		do_dx = !!au_opt_test(mntflags, DIO);
+		au_dy_arefresh(do_dx);
+	}
+
+	aufs_write_unlock(root);
+
+out:
+	inode_unlock(inode);
+	err = cvt_err(err);
+	if (unlikely(err))
+		pr_err("remount err %d\n", err);
+
+	return err;
+}
+
 /* ---------------------------------------------------------------------- */
 
 /* remove later */
@@ -747,7 +799,8 @@ static const struct fs_context_operations au_fsctx_ops = {
 	.free			= au_fsctx_free,
 	.parse_param		= au_fsctx_parse_param,
 	.parse_monolithic	= au_fsctx_parse_monolithic,
-	.get_tree		= au_fsctx_get_tree
+	.get_tree		= au_fsctx_get_tree,
+	.reconfigure		= au_fsctx_reconfigure
 	/*
 	 * nfs4 requires ->dup()? No.
 	 * I don't know what is this ->dup() for.
@@ -779,12 +832,20 @@ int aufs_fsctx_init(struct fs_context *fc)
 	a->opts.sb_flags = fc->sb_flags;
 
 	a->sb = NULL;
-	a->sbinfo = au_si_alloc(a->sb);
-	AuDebugOn(!a->sbinfo);
-	err = PTR_ERR(a->sbinfo);
-	if (IS_ERR(a->sbinfo))
-		goto out_opt;
-	au_rw_write_unlock(&a->sbinfo->si_rwsem);
+	if (fc->root) {
+		AuDebugOn(fc->purpose != FS_CONTEXT_FOR_RECONFIGURE);
+		a->opts.flags = AuOpts_REMOUNT;
+		a->sb = fc->root->d_sb;
+		a->sbinfo = au_sbi(a->sb);
+		kobject_get(&a->sbinfo->si_kobj);
+	} else {
+		a->sbinfo = au_si_alloc(a->sb);
+		AuDebugOn(!a->sbinfo);
+		err = PTR_ERR(a->sbinfo);
+		if (IS_ERR(a->sbinfo))
+			goto out_opt;
+		au_rw_write_unlock(&a->sbinfo->si_rwsem);
+	}
 
 	err = 0;
 	fc->fs_private = a;
