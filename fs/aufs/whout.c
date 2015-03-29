@@ -57,14 +57,10 @@ int au_wh_test(struct mnt_idmap *h_idmap, struct path *h_ppath,
 	int err;
 	struct dentry *wh_dentry;
 
-#if 0 /* re-commit later */
 	if (!try_sio)
 		wh_dentry = vfsub_lkup_one(wh_name, h_ppath);
 	else
 		wh_dentry = au_sio_lkup_one(h_idmap, wh_name, h_ppath);
-#else
-	wh_dentry = ERR_PTR(-ENOENT);
-#endif
 	err = PTR_ERR(wh_dentry);
 	if (IS_ERR(wh_dentry)) {
 		if (err == -ENAMETOOLONG)
@@ -102,6 +98,68 @@ int au_diropq_test(struct mnt_idmap *h_idmap, struct path *h_path)
 	err = au_wh_test(h_idmap, h_path, &diropq_name,
 			 au_test_h_perm_sio(h_idmap, h_dir, MAY_EXEC));
 	return err;
+}
+
+/*
+ * returns a negative dentry whose name is unique and temporary.
+ */
+struct dentry *au_whtmp_lkup(struct dentry *h_parent, struct au_branch *br,
+			     const struct qstr *prefix)
+{
+	struct dentry *dentry;
+	int i;
+	char defname[NAME_MAX - AUFS_MAX_NAMELEN + DNAME_INLINE_LEN + 1],
+		*name, *p;
+	/* strict atomic_t is unnecessary here */
+	static unsigned short cnt;
+	struct qstr qs;
+	struct path h_ppath;
+	struct mnt_idmap *h_idmap;
+
+	BUILD_BUG_ON(sizeof(cnt) * 2 > AUFS_WH_TMP_LEN);
+
+	name = defname;
+	qs.len = sizeof(defname) - DNAME_INLINE_LEN + prefix->len - 1;
+	if (unlikely(prefix->len > DNAME_INLINE_LEN)) {
+		dentry = ERR_PTR(-ENAMETOOLONG);
+		if (unlikely(qs.len > NAME_MAX))
+			goto out;
+		dentry = ERR_PTR(-ENOMEM);
+		name = kmalloc(qs.len + 1, GFP_NOFS);
+		if (unlikely(!name))
+			goto out;
+	}
+
+	/* doubly whiteout-ed */
+	memcpy(name, AUFS_WH_PFX AUFS_WH_PFX, AUFS_WH_PFX_LEN * 2);
+	p = name + AUFS_WH_PFX_LEN * 2;
+	memcpy(p, prefix->name, prefix->len);
+	p += prefix->len;
+	*p++ = '.';
+	AuDebugOn(name + qs.len + 1 - p <= AUFS_WH_TMP_LEN);
+
+	h_ppath.dentry = h_parent;
+	h_ppath.mnt = au_br_mnt(br);
+	h_idmap = au_br_idmap(br);
+	qs.name = name;
+	for (i = 0; i < 3; i++) {
+		sprintf(p, "%.*x", AUFS_WH_TMP_LEN, cnt++);
+		dentry = au_sio_lkup_one(h_idmap, &qs, &h_ppath);
+		if (IS_ERR(dentry) || d_is_negative(dentry))
+			goto out_name;
+		dput(dentry);
+	}
+	/* pr_warn("could not get random name\n"); */
+	dentry = ERR_PTR(-EEXIST);
+	AuDbg("%.*s\n", AuLNPair(&qs));
+	BUG();
+
+out_name:
+	if (name != defname)
+		au_kfree_try_rcu(name);
+out:
+	AuTraceErrPtr(dentry);
+	return dentry;
 }
 
 /* ---------------------------------------------------------------------- */
