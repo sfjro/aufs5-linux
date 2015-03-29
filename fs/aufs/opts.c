@@ -450,6 +450,14 @@ static int au_opt_simple(struct super_block *sb, struct au_opt *opt,
 			au_plink_list(sb);
 		break;
 
+	case Opt_dio:
+		if (opt->tf) {
+			au_opt_set(sbinfo->si_mntflags, DIO);
+			au_fset_opts(opts->flags, REFRESH_DYAOP);
+		} else
+			pr_warn_once("ignored nodio\n");
+		break;
+
 	case Opt_wbr_create:
 		err = au_opt_wbr_create(sb, &opt->wbr_create);
 		break;

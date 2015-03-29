@@ -60,6 +60,7 @@ static void au_fsctx_dump(struct au_opts *opts)
 		au_fsctx_TF(trunc_xino);
 		au_fsctx_TF(trunc_xib);
 		au_fsctx_TF(plink);
+		au_fsctx_TF(dio);
 #undef au_fsctx_TF
 
 		case Opt_trunc_xino_path:
@@ -148,6 +149,8 @@ const struct fs_parameter_spec aufs_fsctx_paramspec[] = {
 #ifdef CONFIG_AUFS_DEBUG
 	fsparam_flag("list_plink", Opt_list_plink),
 #endif
+
+	fsparam_flag_no("dio", Opt_dio),
 
 	fsparam_string("create", Opt_wbr_create),
 	fsparam_string("create_policy", Opt_wbr_create),
@@ -437,6 +440,7 @@ static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *para
 	au_fsctx_TF(trunc_xino);
 	au_fsctx_TF(trunc_xib);
 	au_fsctx_TF(plink);
+	au_fsctx_TF(dio);
 #undef au_fsctx_TF
 
 	case Opt_noxino:

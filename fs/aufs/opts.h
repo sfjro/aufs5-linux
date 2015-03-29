@@ -24,6 +24,7 @@ enum {
 	Opt_trunc_xino_path, Opt_itrunc_xino,
 	Opt_trunc_xib,
 	Opt_plink, Opt_list_plink,
+	Opt_dio,
 	Opt_wbr_copyup, Opt_wbr_create,
 	Opt_tail, Opt_ignore, Opt_ignore_silent, Opt_err
 };
@@ -37,10 +38,12 @@ enum {
 #define AuOpt_UDBA_NONE		BIT(2)		/* users direct branch access */
 #define AuOpt_UDBA_REVAL	BIT(3)
 #define AuOpt_PLINK		BIT(6)		/* pseudo-link */
+#define AuOpt_DIO		BIT(13)		/* direct io */
 
 #define AuOpt_Def	(AuOpt_XINO \
 			 | AuOpt_UDBA_REVAL \
-			 | AuOpt_PLINK)
+			 | AuOpt_PLINK \
+			 | AuOpt_DIO)
 #define AuOptMask_UDBA	(AuOpt_UDBA_NONE \
 			 | AuOpt_UDBA_REVAL)
 
@@ -137,6 +140,7 @@ struct au_opt {
 
 /* opts flags */
 #define AuOpts_TRUNC_XIB	BIT(2)
+#define AuOpts_REFRESH_DYAOP	BIT(3)
 #define au_ftest_opts(flags, name)	((flags) & AuOpts_##name)
 #define au_fset_opts(flags, name) \
 	do { (flags) |= AuOpts_##name; } while (0)

@@ -13,6 +13,7 @@
 #ifdef __KERNEL__
 
 #include <linux/mount.h>
+#include "dynop.h"
 #include "lcnt.h"
 #include "rwsem.h"
 #include "super.h"
@@ -55,6 +56,9 @@ struct au_wbr {
 	unsigned long long	wbr_bytes;
 };
 
+/* ext2 has 3 types of operations at least, ext3 has 4 */
+#define AuBrDynOp (AuDyLast * 4)
+
 /* sysfs entries */
 struct au_brsysfs {
 	char			name[16];
@@ -75,6 +79,8 @@ struct au_branch {
 
 	int			br_perm;
 	struct path		br_path;
+	spinlock_t		br_dykey_lock;
+	struct au_dykey		*br_dykey[AuBrDynOp];
 	au_lcnt_t		br_nfiles;	/* opened files */
 	au_lcnt_t		br_count;	/* in-use for other */
 
