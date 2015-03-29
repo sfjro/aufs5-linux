@@ -45,6 +45,8 @@ static match_table_t brperm = {
 };
 
 static match_table_t brattr = {
+	/* ro/rr branch */
+	{AuBrRAttr_WH, AUFS_BRRATTR_WH},
 	/* add more later */
 	{0, NULL}
 };
