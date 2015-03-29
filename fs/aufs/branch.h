@@ -226,6 +226,12 @@ aufs_bindex_t au_sbr_id(struct super_block *sb, aufs_bindex_t bindex)
 }
 
 static inline
+struct vfsmount *au_sbr_mnt(struct super_block *sb, aufs_bindex_t bindex)
+{
+	return au_br_mnt(au_sbr(sb, bindex));
+}
+
+static inline
 struct mnt_idmap *au_sbr_idmap(struct super_block *sb, aufs_bindex_t bindex)
 {
 	return au_br_idmap(au_sbr(sb, bindex));

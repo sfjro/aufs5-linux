@@ -126,7 +126,12 @@ static inline void vfsub_mnt_drop_write(struct vfsmount *mnt)
 
 int vfsub_create(struct inode *dir, struct path *path, int mode,
 		 bool want_excl);
+int vfsub_symlink(struct inode *dir, struct path *path,
+		  const char *symname);
+int vfsub_mknod(struct inode *dir, struct path *path, int mode, dev_t dev);
 int vfsub_link(struct dentry *src_dentry, struct inode *dir, struct path *path);
+int vfsub_rename(struct inode *src_hdir, struct dentry *src_dentry,
+		 struct inode *hdir, struct path *path, unsigned int flags);
 struct dentry *vfsub_mkdir(struct inode *dir, struct path *path, int mode);
 int vfsub_rmdir(struct inode *dir, struct path *path);
 
@@ -146,11 +151,44 @@ static inline loff_t vfsub_f_size_read(struct file *file)
 	return i_size_read(file_inode(file));
 }
 
+/*
+ * re-use branch fs's ioctl(FICLONE) while aufs itself doesn't support such
+ * ioctl.
+ */
+static inline loff_t vfsub_clone_file_range(struct file *src, struct file *dst,
+					    loff_t len)
+{
+	loff_t err;
+
+	lockdep_off();
+	err = vfs_clone_file_range(src, 0, dst, 0, len, /*remap_flags*/0);
+	lockdep_on();
+
+	return err;
+}
+
+/* ---------------------------------------------------------------------- */
+
+static inline loff_t vfsub_llseek(struct file *file, loff_t offset, int origin)
+{
+	loff_t err;
+
+	lockdep_off();
+	err = vfs_llseek(file, offset, origin);
+	lockdep_on();
+	return err;
+}
+
 /* ---------------------------------------------------------------------- */
 
 int vfsub_sio_notify_change(struct path *path, struct iattr *ia);
 int vfsub_notify_change(const struct path *path, struct iattr *ia);
 int vfsub_unlink(struct inode *dir, const struct path *path, int force);
+
+static inline int vfsub_getattr(const struct path *path, struct kstat *st)
+{
+	return vfs_getattr(path, st, STATX_BASIC_STATS, AT_STATX_SYNC_AS_STAT);
+}
 
 #endif /* __KERNEL__ */
 #endif /* __AUFS_VFSUB_H__ */

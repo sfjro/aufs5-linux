@@ -16,6 +16,7 @@
 #include <linux/time.h>
 
 struct inode;
+struct au_pin;
 
 void au_cpup_attr_flags(struct inode *dst, unsigned int iflags);
 void au_cpup_attr_timesizes(struct inode *inode);
@@ -23,6 +24,30 @@ void au_cpup_attr_nlink(struct inode *inode, int force);
 void au_cpup_attr_changeable(struct inode *inode);
 void au_cpup_igen(struct inode *inode, struct inode *h_inode);
 void au_cpup_attr_all(struct inode *inode, int force);
+
+/* ---------------------------------------------------------------------- */
+
+struct au_cp_generic {
+	struct dentry	*dentry;
+	aufs_bindex_t	bdst, bsrc;
+	loff_t		len;
+	struct au_pin	*pin;
+	unsigned int	flags;
+};
+
+/* cpup flags */
+#define AuCpup_DTIME		BIT(0)		/* do dtime_store/revert */
+#define AuCpup_KEEPLINO		BIT(1)		/* do not clear the lower xino,
+						   for link(2) */
+#define AuCpup_RENAME		BIT(2)		/* rename after cpup */
+
+#define au_ftest_cpup(flags, name)	((flags) & AuCpup_##name)
+#define au_fset_cpup(flags, name) \
+	do { (flags) |= AuCpup_##name; } while (0)
+#define au_fclr_cpup(flags, name) \
+	do { (flags) &= ~AuCpup_##name; } while (0)
+
+int au_copy_file(struct file *dst, struct file *src, loff_t len);
 
 /* ---------------------------------------------------------------------- */
 

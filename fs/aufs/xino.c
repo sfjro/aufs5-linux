@@ -276,9 +276,7 @@ struct file *au_xino_create2(struct super_block *sb, const struct path *base,
 
 	if (copy_src) {
 		/* no one can touch copy_src xino */
-#if 0 /* re-commit later */
 		err = au_copy_file(file, copy_src, vfsub_f_size_read(copy_src));
-#endif
 		if (unlikely(err)) {
 			pr_err("%pd copy err %d\n", dentry, err);
 			goto out_fput;
