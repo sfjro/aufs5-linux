@@ -494,6 +494,10 @@ static int au_opt_simple(struct super_block *sb, struct au_opt *opt,
 		sbinfo->si_wbr_copyup_ops = au_wbr_copyup_ops + opt->wbr_copyup;
 		break;
 
+	case Opt_dirwh:
+		sbinfo->si_dirwh = opt->dirwh;
+		break;
+
 	case Opt_rdcache:
 		sbinfo->si_rdcache
 			= msecs_to_jiffies(opt->rdcache * MSEC_PER_SEC);

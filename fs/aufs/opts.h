@@ -20,7 +20,7 @@ enum {
 	Opt_br,
 	Opt_add, Opt_del, Opt_mod, Opt_append, Opt_prepend,
 	Opt_idel, Opt_imod,
-	Opt_rdcache, Opt_rdblk, Opt_rdhash,
+	Opt_dirwh, Opt_rdcache, Opt_rdblk, Opt_rdhash,
 	Opt_xino, Opt_noxino,
 	Opt_trunc_xino, Opt_trunc_xino_v,
 	Opt_trunc_xino_path, Opt_itrunc_xino,
@@ -161,6 +161,7 @@ struct au_opt {
 		struct au_opt_add	add;
 		struct au_opt_del	del;
 		struct au_opt_mod	mod;
+		int			dirwh;
 		int			rdcache;
 		unsigned int		rdblk;
 		unsigned int		rdhash;
