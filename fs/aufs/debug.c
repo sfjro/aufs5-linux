@@ -150,6 +150,69 @@ void au_dpri_dentry(struct dentry *dentry)
 		do_pri_dentry(bindex, au_hdentry(dinfo, bindex)->hd_dentry);
 }
 
+static int do_pri_br(aufs_bindex_t bindex, struct au_branch *br)
+{
+	struct vfsmount *mnt;
+	struct super_block *sb;
+
+	if (!br || IS_ERR(br))
+		goto out;
+	mnt = au_br_mnt(br);
+	if (!mnt || IS_ERR(mnt))
+		goto out;
+	sb = mnt->mnt_sb;
+	if (!sb || IS_ERR(sb))
+		goto out;
+
+	dpri("s%d: {perm 0x%x, id %d}, "
+	     "%s, dev 0x%02x%02x, flags 0x%lx, cnt %d, active %d\n",
+	     bindex, br->br_perm, br->br_id,
+	     au_sbtype(sb), MAJOR(sb->s_dev), MINOR(sb->s_dev),
+	     sb->s_flags, sb->s_count,
+	     atomic_read(&sb->s_active));
+	return 0;
+
+out:
+	dpri("s%d: err %ld\n", bindex, PTR_ERR(br));
+	return -1;
+}
+
+void au_dpri_sb(struct super_block *sb)
+{
+	struct au_sbinfo *sbinfo;
+	aufs_bindex_t bindex;
+	int err;
+	/* to reduce stack size */
+	struct {
+		struct vfsmount mnt;
+		struct au_branch fake;
+	} *a;
+
+	/* this function can be called from magic sysrq */
+	a = kzalloc(sizeof(*a), GFP_ATOMIC);
+	if (unlikely(!a)) {
+		dpri("no memory\n");
+		return;
+	}
+
+	a->mnt.mnt_sb = sb;
+	a->fake.br_path.mnt = &a->mnt;
+	err = do_pri_br(-1, &a->fake);
+	au_kfree_rcu(a);
+	dpri("dev 0x%x\n", sb->s_dev);
+	if (err || !au_test_aufs(sb))
+		return;
+
+	sbinfo = au_sbi(sb);
+	if (!sbinfo)
+		return;
+	dpri("gen %u, kobj %d\n",
+	     sbinfo->si_generation,
+	     kref_read(&sbinfo->si_kobj.kref));
+	for (bindex = 0; bindex <= sbinfo->si_bbot; bindex++)
+		do_pri_br(bindex, sbinfo->si_branch[0 + bindex]);
+}
+
 /* ---------------------------------------------------------------------- */
 
 void __au_dbg_verify_dinode(struct dentry *dentry, const char *func, int line)
