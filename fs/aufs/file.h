@@ -55,6 +55,8 @@ extern const struct address_space_operations aufs_aop;
 unsigned int au_file_roflags(unsigned int flags);
 struct file *au_h_open(struct dentry *dentry, aufs_bindex_t bindex, int flags,
 		       struct file *file);
+int au_reval_and_lock_fdi(struct file *file, int (*reopen)(struct file *file),
+			  int wlock, unsigned int fi_lsc);
 
 /* finfo.c */
 void au_hfput(struct au_hfile *hf, int execed);
@@ -92,6 +94,45 @@ static inline struct au_finfo *au_fi(struct file *file)
 #define fi_read_unlock(f)	au_rw_read_unlock(&au_fi(f)->fi_rwsem)
 #define fi_write_unlock(f)	au_rw_write_unlock(&au_fi(f)->fi_rwsem)
 #define fi_downgrade_lock(f)	au_rw_dgrade_lock(&au_fi(f)->fi_rwsem)
+
+/* lock subclass for finfo */
+enum {
+	AuLsc_FI_1,
+	AuLsc_FI_2
+};
+
+static inline void fi_read_lock_nested(struct file *f, unsigned int lsc)
+{
+	au_rw_read_lock_nested(&au_fi(f)->fi_rwsem, lsc);
+}
+
+static inline void fi_write_lock_nested(struct file *f, unsigned int lsc)
+{
+	au_rw_write_lock_nested(&au_fi(f)->fi_rwsem, lsc);
+}
+
+/*
+ * fi_read_lock_1, fi_write_lock_1,
+ * fi_read_lock_2, fi_write_lock_2
+ */
+#define AuReadLockFunc(name) \
+static inline void fi_read_lock_##name(struct file *f) \
+{ fi_read_lock_nested(f, AuLsc_FI_##name); }
+
+#define AuWriteLockFunc(name) \
+static inline void fi_write_lock_##name(struct file *f) \
+{ fi_write_lock_nested(f, AuLsc_FI_##name); }
+
+#define AuRWLockFuncs(name) \
+	AuReadLockFunc(name) \
+	AuWriteLockFunc(name)
+
+AuRWLockFuncs(1);
+AuRWLockFuncs(2);
+
+#undef AuReadLockFunc
+#undef AuWriteLockFunc
+#undef AuRWLockFuncs
 
 #define FiMustNoWaiters(f)	AuRwMustNoWaiters(&au_fi(f)->fi_rwsem)
 #define FiMustAnyLock(f)	AuRwMustAnyLock(&au_fi(f)->fi_rwsem)
