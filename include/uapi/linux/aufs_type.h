@@ -111,6 +111,8 @@ typedef int16_t aufs_bindex_t;
 #define AUFS_BRPERM_RW		"rw"
 #define AUFS_BRPERM_RO		"ro"
 #define AUFS_BRPERM_RR		"rr"
+#define AUFS_BRATTR_COO_REG	"coo_reg"
+#define AUFS_BRATTR_COO_ALL	"coo_all"
 #define AUFS_BRATTR_ICEX	"icex"
 #define AUFS_BRATTR_ICEX_SEC	"icexsec"
 #define AUFS_BRATTR_ICEX_SYS	"icexsys"
@@ -119,11 +121,16 @@ typedef int16_t aufs_bindex_t;
 #define AUFS_BRATTR_ICEX_OTH	"icexoth"
 #define AUFS_BRRATTR_WH		"wh"
 #define AUFS_BRWATTR_NLWH	"nolwh"
+#define AUFS_BRWATTR_MOO	"moo"
 
 #define AuBrPerm_RW		1		/* writable, hardlinkable wh */
 #define AuBrPerm_RO		(1 << 1)	/* readonly */
 #define AuBrPerm_RR		(1 << 2)	/* natively readonly */
 #define AuBrPerm_Mask		(AuBrPerm_RW | AuBrPerm_RO | AuBrPerm_RR)
+
+#define AuBrAttr_COO_REG	(1 << 3)	/* copy-up on open */
+#define AuBrAttr_COO_ALL	(1 << 4)
+#define AuBrAttr_COO_Mask	(AuBrAttr_COO_REG | AuBrAttr_COO_ALL)
 
 /* ignore error in copying XATTR */
 #define AuBrAttr_ICEX_SEC	(1 << 7)
@@ -141,7 +148,10 @@ typedef int16_t aufs_bindex_t;
 #define AuBrRAttr_Mask		AuBrRAttr_WH
 
 #define AuBrWAttr_NoLinkWH	(1 << 13)	/* un-hardlinkable whiteouts */
-#define AuBrWAttr_Mask		AuBrWAttr_NoLinkWH
+#define AuBrWAttr_MOO		(1 << 14)	/* move-up on open */
+#define AuBrWAttr_Mask		(AuBrWAttr_NoLinkWH | AuBrWAttr_MOO)
+
+#define AuBrAttr_CMOO_Mask	(AuBrAttr_COO_Mask | AuBrWAttr_MOO)
 
 /* #warning test userspace */
 #ifdef __KERNEL__
@@ -187,6 +197,11 @@ static inline int au_br_whable(int brperm)
 static inline int au_br_wh_linkable(int brperm)
 {
 	return !(brperm & AuBrWAttr_NoLinkWH);
+}
+
+static inline int au_br_cmoo(int brperm)
+{
+	return brperm & AuBrAttr_CMOO_Mask;
 }
 
 /* ---------------------------------------------------------------------- */
