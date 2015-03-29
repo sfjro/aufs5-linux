@@ -113,6 +113,8 @@ void au_optstr_br_perm(au_br_perm_str_t *str, int perm);
 int au_opt_add(struct au_opt *opt, char *opt_str, unsigned long sb_flags,
 	       aufs_bindex_t bindex);
 struct super_block;
+int au_opts_verify(struct super_block *sb, unsigned long sb_flags,
+		   unsigned int pending);
 int au_opts_mount(struct super_block *sb, struct au_opts *opts);
 
 /* fsctx.c */

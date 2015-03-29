@@ -1584,7 +1584,7 @@ struct file *au_xino_def(struct super_block *sb)
 	bwr = -1;
 	for (bindex = 0; bindex <= bbot; bindex++) {
 		br = au_sbr(sb, bindex);
-		if (0 /* au_br_writable(br->br_perm) */ /* re-commit later */
+		if (au_br_writable(br->br_perm)
 		    && !au_test_fs_bad_xino(au_br_sb(br))) {
 			bwr = bindex;
 			break;

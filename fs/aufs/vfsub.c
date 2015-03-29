@@ -192,6 +192,83 @@ out:
 	return err;
 }
 
+struct dentry *vfsub_mkdir(struct inode *dir, struct path *path, int mode)
+{
+	int err, e;
+	struct dentry *d, *ret;
+	struct inode *inode;
+	struct mnt_idmap *idmap;
+	struct delegated_inode deleg = {};
+
+	IMustLock(dir);
+
+	d = path->dentry;
+	path->dentry = d->d_parent;
+	inode = d_inode(path->dentry);
+	err = security_path_mkdir(path, d, mode_strip_umask(inode, mode));
+	path->dentry = d;
+	ret = ERR_PTR(err);
+	if (unlikely(err))
+		goto out;
+
+	idmap = mnt_idmap(path->mnt);
+	do {
+		/* on error, vfs_mkdir() calls dput() */
+		/* and unlocks the parent dir. Ouch! */
+		dget(d);
+		lockdep_off();
+		ret = vfs_mkdir(idmap, dir, d, mode, &deleg);
+		if (IS_ERR(ret))
+			inode_lock(dir);
+		lockdep_on();
+		if (is_delegated(&deleg)) {
+			e = break_deleg_wait(&deleg);
+			if (!e)
+				continue;
+		}
+		break;
+	} while (1);
+	if (IS_ERR(ret))
+		goto out;
+	dput(d);
+
+out:
+	return ret;
+}
+
+int vfsub_rmdir(struct inode *dir, struct path *path)
+{
+	int err, e;
+	struct dentry *d;
+	struct mnt_idmap *idmap;
+	struct delegated_inode deleg = {};
+
+	IMustLock(dir);
+
+	d = path->dentry;
+	path->dentry = d->d_parent;
+	err = security_path_rmdir(path, d);
+	path->dentry = d;
+	if (unlikely(err))
+		goto out;
+
+	idmap = mnt_idmap(path->mnt);
+	do {
+		lockdep_off();
+		err = vfs_rmdir(idmap, dir, d, &deleg);
+		lockdep_on();
+		if (is_delegated(&deleg)) {
+			e = break_deleg_wait(&deleg);
+			if (!e)
+				continue;
+		}
+		break;
+	} while (1);
+
+out:
+	return err;
+}
+
 /* ---------------------------------------------------------------------- */
 
 /* todo: support mmap_sem? */

@@ -179,7 +179,6 @@ int au_plink_test(struct inode *inode)
 /* 20 is max digits length of ulong 64 */
 #define PLINK_NAME_LEN	((20 + 1) * 2)
 
-/* re-commit later */ __maybe_unused
 static int plink_name(char *name, int len, struct inode *inode,
 		      aufs_bindex_t bindex)
 {
@@ -230,10 +229,8 @@ struct dentry *au_plink_lkup(struct inode *inode, aufs_bindex_t bindex)
 	AuDebugOn(au_plink_maint(inode->i_sb, AuLock_NOPLM));
 
 	br = au_sbr(inode->i_sb, bindex);
-#if 0 /* re-commit later */
 	h_ppath.dentry = br->br_wbr->wbr_plink;
 	h_ppath.mnt = au_br_mnt(br);
-#endif
 	tgtname.len = plink_name(a, sizeof(a), inode, bindex);
 
 	if (!uid_eq(current_fsuid(), GLOBAL_ROOT_UID)) {
@@ -253,7 +250,6 @@ struct dentry *au_plink_lkup(struct inode *inode, aufs_bindex_t bindex)
 }
 
 /* create a pseudo-link */
-/* re-commit later */ __maybe_unused
 static int do_whplink(struct qstr *tgt, struct path *h_ppath,
 		      struct dentry *h_dentry)
 {
@@ -302,11 +298,43 @@ struct do_whplink_args {
 	struct dentry *h_dentry;
 };
 
-/* re-commit later */ __maybe_unused
 static void call_do_whplink(void *args)
 {
 	struct do_whplink_args *a = args;
 	*a->errp = do_whplink(a->tgt, a->h_ppath, a->h_dentry);
+}
+
+static int whplink(struct dentry *h_dentry, struct inode *inode,
+		   aufs_bindex_t bindex)
+{
+	int err, wkq_err;
+	struct au_branch *br;
+	struct au_wbr *wbr;
+	struct path h_ppath;
+	char a[PLINK_NAME_LEN];
+	struct qstr tgtname = QSTR_INIT(a, 0);
+
+	br = au_sbr(inode->i_sb, bindex);
+	wbr = br->br_wbr;
+	h_ppath.dentry = wbr->wbr_plink;
+	h_ppath.mnt = au_br_mnt(br);
+	tgtname.len = plink_name(a, sizeof(a), inode, bindex);
+
+	/* always superio. */
+	if (!uid_eq(current_fsuid(), GLOBAL_ROOT_UID)) {
+		struct do_whplink_args args = {
+			.errp		= &err,
+			.tgt		= &tgtname,
+			.h_ppath	= &h_ppath,
+			.h_dentry	= h_dentry
+		};
+		wkq_err = au_wkq_wait(call_do_whplink, &args);
+		if (unlikely(wkq_err))
+			err = wkq_err;
+	} else
+		err = do_whplink(&tgtname, &h_ppath, h_dentry);
+
+	return err;
 }
 
 /*
@@ -354,8 +382,7 @@ void au_plink_append(struct inode *inode, aufs_bindex_t bindex,
 		if (cnt > AUFS_PLINK_WARN)
 			AuWarn1(msg ", %d\n", cnt);
 #undef msg
-		/* err = whplink(h_dentry, inode, bindex); re-commit later */
-		err = 0;
+		err = whplink(h_dentry, inode, bindex);
 		if (unlikely(err)) {
 			pr_warn("err %d, damaged pseudo link.\n", err);
 			au_hbl_del(&icntnr->plink, hbl);

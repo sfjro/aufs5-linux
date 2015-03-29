@@ -24,6 +24,9 @@ struct inode;
 int au_wh_unlink_dentry(struct inode *h_dir, struct path *h_path,
 			struct dentry *dentry);
 struct au_branch;
+struct super_block;
+int au_wh_init(struct au_branch *br, struct super_block *sb);
+
 struct dentry *au_wh_lkup(struct dentry *h_parent, const struct qstr *base_name,
 			  struct au_branch *br);
 struct dentry *au_wh_create(struct dentry *dentry, aufs_bindex_t bindex,
