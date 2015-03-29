@@ -196,6 +196,8 @@ int aufs_create(struct mnt_idmap *idmap, struct inode *dir,
 		struct dentry *dentry, umode_t mode, bool want_excl);
 int aufs_tmpfile(struct mnt_idmap *idmap, struct inode *dir,
 		 struct file *file, umode_t mode);
+int aufs_link(struct dentry *src_dentry, struct inode *dir,
+	      struct dentry *dentry);
 struct dentry *aufs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 			  struct dentry *dentry, umode_t mode);
 

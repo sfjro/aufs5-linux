@@ -61,6 +61,19 @@ static inline int au_d_hashed_positive(struct dentry *d)
 	return err;
 }
 
+static inline int au_d_linkable(struct dentry *d)
+{
+	int err;
+	struct inode *inode = d_inode(d);
+
+	err = au_d_hashed_positive(d);
+	if (err
+	    && d_is_positive(d)
+	    && (inode_state_read_once(inode) & I_LINKABLE))
+		err = 0;
+	return err;
+}
+
 static inline int au_d_alive(struct dentry *d)
 {
 	int err;
