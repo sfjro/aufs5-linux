@@ -68,10 +68,23 @@ out:
 
 /* ---------------------------------------------------------------------- */
 
+/* final actions when unmounting a file system */
+static void aufs_put_super(struct super_block *sb)
+{
+	struct au_sbinfo *sbinfo;
+
+	sbinfo = au_sbi(sb);
+	if (sbinfo)
+		kobject_put(&sbinfo->si_kobj);
+}
+
+/* ---------------------------------------------------------------------- */
+
 const struct super_operations aufs_sop = {
 	.alloc_inode	= aufs_alloc_inode,
 	.destroy_inode	= aufs_destroy_inode,
 	.free_inode	= aufs_free_inode,
 	/* always deleting, no clearing */
-	.drop_inode	= inode_just_drop
+	.drop_inode	= inode_just_drop,
+	.put_super	= aufs_put_super
 };
