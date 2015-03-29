@@ -20,8 +20,11 @@
 #define AuStubInt0(name, ...) \
 	AuStub(int, name, return 0, __VA_ARGS__)
 
+#include "debug.h"
+
 #include "inode.h"
 #include "module.h"
+#include "rwsem.h"
 #include "super.h"
 /* add more later */
 

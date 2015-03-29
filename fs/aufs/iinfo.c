@@ -14,6 +14,8 @@ struct inode *au_h_iptr(struct inode *inode, aufs_bindex_t bindex)
 	struct inode *h_inode;
 	struct au_hinode *hinode;
 
+	IiMustAnyLock(inode);
+
 	hinode = au_hinode(au_ii(inode), bindex);
 	h_inode = hinode->hi_inode;
 	AuDebugOn(h_inode && atomic_read(&h_inode->i_count) <= 0);
@@ -32,6 +34,8 @@ void au_set_h_iptr(struct inode *inode, aufs_bindex_t bindex,
 	struct au_hinode *hinode;
 	struct inode *hi;
 	struct au_iinfo *iinfo = au_ii(inode);
+
+	IiMustWriteLock(inode);
 
 	hinode = au_hinode(iinfo, bindex);
 	hi = hinode->hi_inode;
@@ -55,8 +59,7 @@ void au_icntnr_init_once(void *_c)
 	struct au_icntnr *c = _c;
 	struct au_iinfo *iinfo = &c->iinfo;
 
-	init_rwsem(&iinfo->ii_rwsem);
-	down_write(&iinfo->ii_rwsem);
+	au_rw_init(&iinfo->ii_rwsem);
 	inode_init_once(&c->vfs_inode);
 }
 
@@ -108,4 +111,5 @@ void au_iinfo_fin(struct inode *inode)
 		}
 	}
 	au_kfree_small(iinfo->ii_hinode);
+	AuRwDestroy(&iinfo->ii_rwsem);
 }
