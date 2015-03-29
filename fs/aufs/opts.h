@@ -120,6 +120,11 @@ struct au_opt_add {
 	struct path	path;
 };
 
+struct au_opt_del {
+	char		*pathname;
+	struct path	h_path;
+};
+
 struct au_opt_xino {
 	char		*path;
 	struct file	*file;
