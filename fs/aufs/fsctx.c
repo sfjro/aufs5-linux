@@ -76,6 +76,10 @@ static void au_fsctx_dump(struct au_opts *opts)
 		case Opt_list_plink:
 			AuLabel(list_plink);
 			break;
+		case Opt_udba:
+			AuDbg("udba %d, %s\n",
+				  opt->udba, au_optstr_udba(opt->udba));
+			break;
 		case Opt_wbr_create:
 			u.create = &opt->wbr_create;
 			AuDbg("create %d, %s\n", u.create->wbr_create,
@@ -149,6 +153,8 @@ const struct fs_parameter_spec aufs_fsctx_paramspec[] = {
 #ifdef CONFIG_AUFS_DEBUG
 	fsparam_flag("list_plink", Opt_list_plink),
 #endif
+
+	fsparam_string("udba", Opt_udba),
 
 	fsparam_flag_no("dio", Opt_dio),
 
@@ -412,6 +418,14 @@ static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *para
 		}
 		err = au_fsctx_parse_xino_itrunc(fc, &opt->xino_itrunc,
 						 result.int_32);
+		break;
+
+	case Opt_udba:
+		opt->udba = au_udba_val(param->string);
+		if (opt->udba >= 0)
+			err = 0;
+		else
+			errorf(fc, "wrong value, %s", param->string);
 		break;
 
 	case Opt_wbr_create:

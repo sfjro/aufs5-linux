@@ -518,7 +518,7 @@ static void reinit_br_wh(void *arg)
 	h_root = au_h_dptr(a->sb->s_root, bindex);
 	AuDebugOn(h_root != au_br_dentry(a->br));
 
-	inode_lock_nested(hdir->hi_inode, AuLsc_I_PARENT);
+	au_hn_inode_lock_nested(hdir, AuLsc_I_PARENT);
 	wbr_wh_write_lock(wbr);
 	err = au_h_verify(wbr->wbr_whbase, au_opt_udba(a->sb), hdir->hi_inode,
 			  h_root, a->br);
@@ -539,7 +539,7 @@ static void reinit_br_wh(void *arg)
 	if (!err)
 		err = au_wh_init(a->br, a->sb);
 	wbr_wh_write_unlock(wbr);
-	inode_unlock(hdir->hi_inode);
+	au_hn_inode_unlock(hdir);
 	di_read_unlock(a->sb->s_root, AuLock_IR);
 
 out:

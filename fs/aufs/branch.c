@@ -19,6 +19,7 @@ static void au_br_do_free(struct au_branch *br)
 	struct au_wbr *wbr;
 	struct au_dykey **key;
 
+	au_hnotify_fin_br(br);
 	au_xino_put(br);
 
 	AuLCntZero(au_lcnt_read(&br->br_nfiles, /*do_rev*/0));
@@ -120,13 +121,16 @@ static struct au_branch *au_br_alloc(struct super_block *sb, int new_nbranch,
 	add_branch->br_xino = au_xino_alloc(/*nfile*/1);
 	if (unlikely(!add_branch->br_xino))
 		goto out_br;
+	err = au_hnotify_init_br(add_branch, perm);
+	if (unlikely(err))
+		goto out_xino;
 
 	if (au_br_writable(perm)) {
 		/* may be freed separately at changing the branch permission */
 		add_branch->br_wbr = kzalloc(sizeof(*add_branch->br_wbr),
 					     GFP_NOFS);
 		if (unlikely(!add_branch->br_wbr))
-			goto out_xino;
+			goto out_hnotify;
 	}
 
 	root = sb->s_root;
@@ -143,6 +147,8 @@ static struct au_branch *au_br_alloc(struct super_block *sb, int new_nbranch,
 
 	au_kfree_rcu(add_branch->br_wbr);
 
+out_hnotify:
+	au_hnotify_fin_br(add_branch);
 out_xino:
 	au_xino_put(add_branch);
 out_br:
@@ -275,7 +281,7 @@ static int au_br_init_wh(struct super_block *sb, struct au_branch *br,
 	bindex = au_br_index(sb, br->br_id);
 	if (0 <= bindex) {
 		hdir = au_hi(d_inode(sb->s_root), bindex);
-		inode_lock_nested(hdir->hi_inode, AuLsc_I_PARENT);
+		au_hn_inode_lock_nested(hdir, AuLsc_I_PARENT);
 	} else {
 		h_dentry = au_br_dentry(br);
 		h_inode = d_inode(h_dentry);
@@ -289,7 +295,7 @@ static int au_br_init_wh(struct super_block *sb, struct au_branch *br,
 		wbr_wh_write_unlock(wbr);
 	}
 	if (hdir)
-		inode_unlock(hdir->hi_inode);
+		au_hn_inode_unlock(hdir);
 	else
 		inode_unlock(h_inode);
 	vfsub_mnt_drop_write(au_br_mnt(br));

@@ -25,6 +25,7 @@ struct inode *au_h_iptr(struct inode *inode, aufs_bindex_t bindex)
 /* todo: hard/soft set? */
 void au_hiput(struct au_hinode *hinode)
 {
+	au_hn_free(hinode);
 	dput(hinode->hi_whdentry);
 	iput(hinode->hi_inode);
 }
@@ -37,6 +38,8 @@ unsigned int au_hi_flags(struct inode *inode, int isdir)
 	flags = 0;
 	if (au_opt_test(mnt_flags, XINO))
 		au_fset_hi(flags, XINO);
+	if (isdir && au_opt_test(mnt_flags, UDBA_HNOTIFY))
+		au_fset_hi(flags, HNOTIFY);
 	return flags;
 }
 
@@ -73,6 +76,13 @@ void au_set_h_iptr(struct inode *inode, aufs_bindex_t bindex,
 					    inode->i_ino);
 			if (unlikely(err))
 				AuIOErr1("failed au_xino_write() %d\n", err);
+		}
+
+		if (au_ftest_hi(flags, HNOTIFY)
+		    && au_br_hnotifyable(br->br_perm)) {
+			err = au_hn_alloc(hinode, inode);
+			if (unlikely(err))
+				AuIOErr1("au_hn_alloc() %d\n", err);
 		}
 	}
 }
@@ -163,6 +173,7 @@ void au_hinode_init(struct au_hinode *hinode)
 {
 	hinode->hi_inode = NULL;
 	hinode->hi_id = -1;
+	au_hn_init(hinode);
 	hinode->hi_whdentry = NULL;
 }
 

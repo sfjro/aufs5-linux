@@ -55,7 +55,7 @@ char *au_plevel = KERN_DEBUG;
 
 /* ---------------------------------------------------------------------- */
 
-static int do_pri_inode(aufs_bindex_t bindex, struct inode *inode,
+static int do_pri_inode(aufs_bindex_t bindex, struct inode *inode, int hn,
 			struct dentry *wh)
 {
 	char *n = NULL;
@@ -77,12 +77,12 @@ static int do_pri_inode(aufs_bindex_t bindex, struct inode *inode,
 
 	ctime = inode_get_ctime(inode);
 	dpri("i%d: %p, i%lu, %s, cnt %d, nl %u?, 0%o, sz %llu, blk %llu,"
-	     " ct %lld, np %lu, st 0x%x, f 0x%x, v %llu, g %x%s%.*s\n",
+	     " hn %d, ct %lld, np %lu, st 0x%x, f 0x%x, v %llu, g %x%s%.*s\n",
 	     bindex, inode,
 	     inode->i_ino, inode->i_sb ? au_sbtype(inode->i_sb) : "??",
 	     atomic_read(&inode->i_count), inode->i_nlink, inode->i_mode,
 	     i_size_read(inode), (unsigned long long)inode->i_blocks,
-	     (long long)timespec64_to_ns(&ctime) & 0x0ffff,
+	     hn, (long long)timespec64_to_ns(&ctime) & 0x0ffff,
 	     inode->i_mapping ? inode->i_mapping->nrpages : 0,
 	     inode_state_read_once(inode), inode->i_flags,
 	     inode_peek_iversion(inode), inode->i_generation,
@@ -93,10 +93,11 @@ static int do_pri_inode(aufs_bindex_t bindex, struct inode *inode,
 void au_dpri_inode(struct inode *inode)
 {
 	struct au_iinfo *iinfo;
+	struct au_hinode *hi;
 	aufs_bindex_t bindex;
-	int err;
+	int err, hn;
 
-	err = do_pri_inode(-1, inode, NULL);
+	err = do_pri_inode(-1, inode, -1, NULL);
 	if (err || !au_test_aufs(inode->i_sb) || au_is_bad_inode(inode))
 		return;
 
@@ -105,9 +106,12 @@ void au_dpri_inode(struct inode *inode)
 	     iinfo->ii_btop, iinfo->ii_bbot, au_iigen(inode));
 	if (iinfo->ii_btop < 0)
 		return;
-	for (bindex = iinfo->ii_btop; bindex <= iinfo->ii_bbot; bindex++)
-		do_pri_inode(bindex, iinfo->ii_hinode[0 + bindex].hi_inode,
-			     iinfo->ii_hinode[0 + bindex].hi_whdentry);
+	hn = 0;
+	for (bindex = iinfo->ii_btop; bindex <= iinfo->ii_bbot; bindex++) {
+		hi = au_hinode(iinfo, bindex);
+		hn = !!au_hn(hi);
+		do_pri_inode(bindex, hi->hi_inode, hn, hi->hi_whdentry);
+	}
 }
 
 void au_dpri_dalias(struct inode *inode)
@@ -123,6 +127,7 @@ void au_dpri_dalias(struct inode *inode)
 static int do_pri_dentry(aufs_bindex_t bindex, struct dentry *dentry)
 {
 	struct dentry *wh = NULL;
+	int hn;
 	struct inode *inode;
 	struct au_iinfo *iinfo;
 	struct au_hinode *hi;
@@ -138,6 +143,7 @@ static int do_pri_dentry(aufs_bindex_t bindex, struct dentry *dentry)
 	     dentry->d_sb ? au_sbtype(dentry->d_sb) : "??",
 	     au_dcount(dentry), dentry->d_flags,
 	     d_unhashed(dentry) ? "un" : "");
+	hn = -1;
 	inode = NULL;
 	if (d_is_positive(dentry))
 		inode = d_inode(dentry);
@@ -147,9 +153,10 @@ static int do_pri_dentry(aufs_bindex_t bindex, struct dentry *dentry)
 	    && !au_is_bad_inode(inode)) {
 		iinfo = au_ii(inode);
 		hi = au_hinode(iinfo, bindex);
+		hn = !!au_hn(hi);
 		wh = hi->hi_whdentry;
 	}
-	do_pri_inode(bindex, inode, wh);
+	do_pri_inode(bindex, inode, hn, wh);
 	return 0;
 }
 

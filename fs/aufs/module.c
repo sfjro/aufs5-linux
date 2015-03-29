@@ -81,7 +81,10 @@ static void au_cache_fin(void)
 	 * destroy cache.
 	 */
 	rcu_barrier();
-	for (i = 0; i < AuCache_Last; i++) {
+
+	/* excluding AuCache_HNOTIFY */
+	BUILD_BUG_ON(AuCache_HNOTIFY + 1 != AuCache_Last);
+	for (i = 0; i < AuCache_HNOTIFY; i++) {
 		kmem_cache_destroy(au_cache[i]);
 		au_cache[i] = NULL;
 	}
@@ -162,7 +165,7 @@ static int __init aufs_init(void)
 
 	au_dir_roflags = au_file_roflags(O_DIRECTORY | O_LARGEFILE);
 
-	memset(au_cache, 0, sizeof(au_cache));
+	memset(au_cache, 0, sizeof(au_cache));	/* including hnotify */
 
 	au_sbilist_init();
 	sysaufs_brs_init();
@@ -176,14 +179,19 @@ static int __init aufs_init(void)
 	err = au_wkq_init();
 	if (unlikely(err))
 		goto out_procfs;
-	err = au_cache_init();
+	err = au_hnotify_init();
 	if (unlikely(err))
 		goto out_wkq;
+	err = au_cache_init();
+	if (unlikely(err))
+		goto out_hin;
 
 	/* since we define pr_fmt, call printk directly */
 	printk(KERN_INFO AUFS_NAME " " AUFS_VERSION "\n");
 	goto out; /* success */
 
+out_hin:
+	au_hnotify_fin();
 out_wkq:
 	au_wkq_fin();
 out_procfs:
