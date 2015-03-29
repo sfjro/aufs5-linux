@@ -329,6 +329,77 @@ ssize_t vfsub_write_k(struct file *file, void *kbuf, size_t count, loff_t *ppos)
 
 /* ---------------------------------------------------------------------- */
 
+struct notify_change_args {
+	int *errp;
+	const struct path *path;
+	struct iattr *ia;
+};
+
+static void call_notify_change(void *args)
+{
+	struct notify_change_args *a = args;
+	struct inode *h_inode;
+	struct mnt_idmap *idmap;
+	struct delegated_inode deleg = {};
+
+	h_inode = d_inode(a->path->dentry);
+	IMustLock(h_inode);
+
+	*a->errp = -EPERM;
+	if (IS_IMMUTABLE(h_inode) || IS_APPEND(h_inode))
+		goto out;
+
+	idmap = mnt_idmap(a->path->mnt);
+	do {
+		lockdep_off();
+		*a->errp = notify_change(idmap, a->path->dentry, a->ia, &deleg);
+		lockdep_on();
+		if (is_delegated(&deleg)) {
+			int e;
+
+			e = break_deleg_wait(&deleg);
+			if (!e)
+				continue;
+		}
+		break;
+	} while (1);
+
+out:
+	AuTraceErr(*a->errp);
+}
+
+int vfsub_notify_change(const struct path *path, struct iattr *ia)
+{
+	int err;
+	struct notify_change_args args = {
+		.errp	= &err,
+		.path	= path,
+		.ia	= ia
+	};
+
+	call_notify_change(&args);
+
+	return err;
+}
+
+int vfsub_sio_notify_change(struct path *path, struct iattr *ia)
+{
+	int err, wkq_err;
+	struct notify_change_args args = {
+		.errp	= &err,
+		.path	= path,
+		.ia	= ia
+	};
+
+	wkq_err = au_wkq_wait(call_notify_change, &args);
+	if (unlikely(wkq_err))
+		err = wkq_err;
+
+	return err;
+}
+
+/* ---------------------------------------------------------------------- */
+
 struct unlink_args {
 	int *errp;
 	struct inode *dir;

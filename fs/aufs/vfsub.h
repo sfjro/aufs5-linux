@@ -148,6 +148,8 @@ static inline loff_t vfsub_f_size_read(struct file *file)
 
 /* ---------------------------------------------------------------------- */
 
+int vfsub_sio_notify_change(struct path *path, struct iattr *ia);
+int vfsub_notify_change(const struct path *path, struct iattr *ia);
 int vfsub_unlink(struct inode *dir, const struct path *path, int force);
 
 #endif /* __KERNEL__ */
