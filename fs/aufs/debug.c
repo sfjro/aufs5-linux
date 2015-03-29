@@ -212,9 +212,10 @@ void au_dpri_dentry(struct dentry *dentry)
 	dinfo = au_di(dentry);
 	if (!dinfo)
 		return;
-	dpri("d-1: btop %d, bbot %d, bwh %d, bdiropq %d, gen %d\n",
+	dpri("d-1: btop %d, bbot %d, bwh %d, bdiropq %d, gen %d, tmp %d\n",
 	     dinfo->di_btop, dinfo->di_bbot,
-	     dinfo->di_bwh, dinfo->di_bdiropq, au_digen(dentry));
+	     dinfo->di_bwh, dinfo->di_bdiropq, au_digen(dentry),
+	     dinfo->di_tmpfile);
 	if (dinfo->di_btop < 0)
 		return;
 	for (bindex = dinfo->di_btop; bindex <= dinfo->di_bbot; bindex++)

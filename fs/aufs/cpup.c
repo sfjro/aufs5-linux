@@ -645,10 +645,7 @@ int cpup_entry(struct au_cp_generic *cpg, struct dentry *dst_parent,
 	    && !isdir
 	    && au_opt_test(mnt_flags, XINO)
 	    && (vfsub_inode_nlink(h_inode, AU_I_BRANCH) == 1
-#if 0 /* re-commit later */
-		|| au_ii(d_inode(cpg->dentry))->ii_tmpfile
-#endif
-		    )
+		|| au_ii(d_inode(cpg->dentry))->ii_tmpfile)
 	    /* todo: unnecessary? */
 	    /* && d_inode(cpg->dentry)->i_nlink == 1 */
 	    && cpg->bdst < cpg->bsrc
@@ -843,10 +840,7 @@ static int au_cpup_single(struct au_cp_generic *cpg, struct dentry *dst_parent)
 	src_inode = d_inode(h_src);
 	if (!isdir
 	    && (vfsub_inode_nlink(src_inode, AU_I_BRANCH) > 1
-#if 0 /* re-commit later */
-		|| au_ii(inode)->ii_tmpfile
-#endif
-		    )
+		|| au_ii(inode)->ii_tmpfile)
 	    && plink)
 		au_plink_append(inode, cpg->bdst, h_dst);
 

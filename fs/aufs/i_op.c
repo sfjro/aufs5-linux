@@ -228,6 +228,134 @@ out:
 
 /* ---------------------------------------------------------------------- */
 
+static int au_wr_dir_cpup(struct dentry *dentry, struct dentry *parent,
+			  const unsigned char add_entry, aufs_bindex_t bcpup,
+			  aufs_bindex_t btop)
+{
+	int err;
+	struct dentry *h_parent;
+	struct inode *h_dir;
+
+	if (add_entry)
+		IMustLock(d_inode(parent));
+	else
+		di_write_lock_parent(parent);
+
+	err = 0;
+	if (!au_h_dptr(parent, bcpup)) {
+		if (btop > bcpup)
+			err = au_cpup_dirs(dentry, bcpup);
+		else if (btop < bcpup)
+			err = au_cpdown_dirs(dentry, bcpup);
+		else
+			BUG();
+	}
+	if (!err && add_entry && !au_ftest_wrdir(add_entry, TMPFILE)) {
+		h_parent = au_h_dptr(parent, bcpup);
+		h_dir = d_inode(h_parent);
+		inode_lock_shared_nested(h_dir, AuLsc_I_PARENT);
+		err = au_lkup_neg(dentry, bcpup, /*wh*/0);
+		/* todo: no unlock here */
+		inode_unlock_shared(h_dir);
+
+		AuDbg("bcpup %d\n", bcpup);
+		if (!err) {
+			if (d_really_is_negative(dentry))
+				au_set_h_dptr(dentry, btop, NULL);
+			au_update_dbrange(dentry, /*do_put_zero*/0);
+		}
+	}
+
+	if (!add_entry)
+		di_write_unlock(parent);
+	if (!err)
+		err = bcpup; /* success */
+
+	AuTraceErr(err);
+	return err;
+}
+
+/*
+ * decide the branch and the parent dir where we will create a new entry.
+ * returns new bindex or an error.
+ * copyup the parent dir if needed.
+ */
+int au_wr_dir(struct dentry *dentry, struct dentry *src_dentry,
+	      struct au_wr_dir_args *args)
+{
+	int err;
+	unsigned int flags;
+	aufs_bindex_t bcpup, btop, src_btop;
+	const unsigned char add_entry
+		= au_ftest_wrdir(args->flags, ADD_ENTRY)
+		| au_ftest_wrdir(args->flags, TMPFILE);
+	struct super_block *sb;
+	struct dentry *parent;
+	struct au_sbinfo *sbinfo;
+
+	sb = dentry->d_sb;
+	sbinfo = au_sbi(sb);
+	parent = dget_parent(dentry);
+	btop = au_dbtop(dentry);
+	bcpup = btop;
+	if (args->force_btgt < 0) {
+		if (src_dentry) {
+			src_btop = au_dbtop(src_dentry);
+			if (src_btop < btop)
+				bcpup = src_btop;
+		} else if (add_entry) {
+			flags = 0;
+			if (au_ftest_wrdir(args->flags, ISDIR))
+				au_fset_wbr(flags, DIR);
+			err = AuWbrCreate(sbinfo, dentry, flags);
+			bcpup = err;
+		}
+
+		if (bcpup < 0 || au_test_ro(sb, bcpup, d_inode(dentry))) {
+			if (add_entry)
+				err = AuWbrCopyup(sbinfo, dentry);
+			else {
+				if (!IS_ROOT(dentry)) {
+					di_read_lock_parent(parent, !AuLock_IR);
+					err = AuWbrCopyup(sbinfo, dentry);
+					di_read_unlock(parent, !AuLock_IR);
+				} else
+					err = AuWbrCopyup(sbinfo, dentry);
+			}
+			bcpup = err;
+			if (unlikely(err < 0))
+				goto out;
+		}
+	} else {
+		bcpup = args->force_btgt;
+		AuDebugOn(au_test_ro(sb, bcpup, d_inode(dentry)));
+	}
+
+	AuDbg("btop %d, bcpup %d\n", btop, bcpup);
+	err = bcpup;
+	if (bcpup == btop)
+		goto out; /* success */
+
+	/* copyup the new parent into the branch we process */
+	err = au_wr_dir_cpup(dentry, parent, add_entry, bcpup, btop);
+	if (err >= 0) {
+		if (d_really_is_negative(dentry)) {
+			au_set_h_dptr(dentry, btop, NULL);
+			au_set_dbtop(dentry, bcpup);
+			au_set_dbbot(dentry, bcpup);
+		}
+		AuDebugOn(add_entry
+			  && !au_ftest_wrdir(args->flags, TMPFILE)
+			  && !au_h_dptr(dentry, bcpup));
+	}
+
+out:
+	dput(parent);
+	return err;
+}
+
+/* ---------------------------------------------------------------------- */
+
 void au_pin_hdir_unlock(struct au_pin *p)
 {
 	if (p->hdir)
@@ -517,9 +645,15 @@ struct inode_operations aufs_iop[] = {
 		.get_link	= aufs_get_link
 	},
 	[AuIop_DIR] = {
+		.create		= aufs_create,
 		.lookup		= aufs_lookup,
+		.symlink	= aufs_symlink,
+		.mkdir		= aufs_mkdir,
+		.mknod		= aufs_mknod,
 
-		.permission	= aufs_permission
+		.permission	= aufs_permission,
+
+		.tmpfile	= aufs_tmpfile
 	},
 	[AuIop_OTHER] = {
 		.permission	= aufs_permission
