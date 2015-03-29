@@ -22,6 +22,8 @@
 
 #include "debug.h"
 
+#include "dcsub.h"
+#include "dentry.h"
 #include "fstype.h"
 #include "inode.h"
 #include "module.h"

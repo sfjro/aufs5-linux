@@ -88,9 +88,11 @@ static void au_cache_fin(void)
 
 static int __init au_cache_init(void)
 {
-	/* SLAB_DESTROY_BY_RCU */
-	au_cache[AuCache_ICNTNR] = AuCacheCtor(au_icntnr,
-					       au_icntnr_init_once);
+	au_cache[AuCache_DINFO] = AuCacheCtor(au_dinfo, au_di_init_once);
+	if (au_cache[AuCache_DINFO])
+		/* SLAB_DESTROY_BY_RCU */
+		au_cache[AuCache_ICNTNR] = AuCacheCtor(au_icntnr,
+						       au_icntnr_init_once);
 	if (au_cache[AuCache_ICNTNR])
 		return 0;
 
