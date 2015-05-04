@@ -81,21 +81,40 @@ out:
 
 int au_do_open(struct file *file, struct au_do_open_args *args)
 {
-	int err;
+	int err, aopen = args->aopen;
 	struct dentry *dentry;
 	struct au_finfo *finfo;
 
-	err = au_finfo_init(file, args->fidir);
+	if (!aopen)
+		err = au_finfo_init(file, args->fidir);
+	else {
+		lockdep_off();
+		err = au_finfo_init(file, args->fidir);
+		lockdep_on();
+	}
 	if (unlikely(err))
 		goto out;
 
 	dentry = file->f_path.dentry;
+	AuDebugOn(IS_ERR_OR_NULL(dentry));
 	di_read_lock_child(dentry, AuLock_IR);
-	err = args->open(file, vfsub_file_flags(file));
+	if (!aopen)
+		err = args->open(file, vfsub_file_flags(file), NULL);
+	else {
+		lockdep_off();
+		err = args->open(file, vfsub_file_flags(file), args->h_file);
+		lockdep_on();
+	}
 	di_read_unlock(dentry, AuLock_IR);
 
 	finfo = au_fi(file);
-	fi_write_unlock(file);
+	if (!aopen)
+		fi_write_unlock(file);
+	else {
+		lockdep_off();
+		fi_write_unlock(file);
+		lockdep_on();
+	}
 	if (unlikely(err)) {
 		finfo->fi_hdir = NULL;
 		au_finfo_fin(file);

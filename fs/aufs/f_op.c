@@ -13,11 +13,10 @@
 #include <linux/security.h>
 #include "aufs.h"
 
-int au_do_open_nondir(struct file *file, int flags)
+int au_do_open_nondir(struct file *file, int flags, struct file *h_file)
 {
 	int err;
 	aufs_bindex_t bindex;
-	struct file *h_file;
 	struct dentry *dentry;
 	struct au_finfo *finfo;
 	struct inode *h_inode;
@@ -26,11 +25,15 @@ int au_do_open_nondir(struct file *file, int flags)
 
 	err = 0;
 	dentry = file->f_path.dentry;
+	AuDebugOn(IS_ERR_OR_NULL(dentry));
 	finfo = au_fi(file);
 	memset(&finfo->fi_htop, 0, sizeof(finfo->fi_htop));
 	atomic_set(&finfo->fi_mmapped, 0);
 	bindex = au_dbtop(dentry);
-	h_file = au_h_open(dentry, bindex, flags, file);
+	if (!h_file)
+		h_file = au_h_open(dentry, bindex, flags, file);
+	else
+		get_file(h_file);
 	if (IS_ERR(h_file))
 		err = PTR_ERR(h_file);
 	else {
