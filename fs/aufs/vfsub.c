@@ -95,6 +95,62 @@ struct file *vfsub_filp_open(const char *path, int oflags, int mode)
 	return file;
 }
 
+/*
+ * Ideally this function should call VFS:do_last() in order to keep all its
+ * checkings. But it is very hard for aufs to regenerate several VFS internal
+ * structure such as nameidata. This is a second (or third) best approach.
+ * cf. linux/fs/namei.c:do_last(), lookup_open() and atomic_open().
+ */
+int vfsub_atomic_open(struct inode *dir, struct dentry *dentry,
+		      struct vfsub_aopen_args *args)
+{
+	int err;
+	struct au_branch *br = args->br;
+	struct file *file = args->file;
+	/* copied from linux/fs/namei.c:atomic_open() */
+	struct dentry *const DENTRY_NOT_SET = (void *)-1UL;
+
+	IMustLock(dir);
+	AuDebugOn(!dir->i_op->atomic_open);
+
+	err = au_br_test_oflag(args->open_flag, br);
+	if (unlikely(err))
+		goto out;
+
+	au_lcnt_inc(&br->br_nfiles);
+	file->__f_path.dentry = DENTRY_NOT_SET;
+	file->__f_path.mnt = au_br_mnt(br);
+	AuDbg("%ps\n", dir->i_op->atomic_open);
+	err = dir->i_op->atomic_open(dir, dentry, file, args->open_flag,
+				     args->create_mode);
+	if (unlikely(err < 0)) {
+		au_lcnt_dec(&br->br_nfiles);
+		goto out;
+	}
+
+	/* temporary workaround for nfsv4 branch */
+	if (au_test_nfs(dir->i_sb))
+		nfs_mark_for_revalidate(dir);
+
+	if (file->f_mode & FMODE_CREATED)
+		fsnotify_create(dir, dentry);
+	if (!(file->f_mode & FMODE_OPENED)) {
+		au_lcnt_dec(&br->br_nfiles);
+		goto out;
+	}
+
+	/* todo: call VFS:may_open() here */
+	/* todo: ima_file_check() too? */
+	if (!err)
+		fsnotify_open(file);
+	else
+		au_lcnt_dec(&br->br_nfiles);
+	/* note that the file is created and still opened */
+
+out:
+	return err;
+}
+
 int vfsub_kern_path(const char *name, unsigned int flags, struct path *path)
 {
 	int err;
