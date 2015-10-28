@@ -156,6 +156,7 @@ struct au_opt {
 #define AuOpts_REFRESH		BIT(1)
 #define AuOpts_TRUNC_XIB	BIT(2)
 #define AuOpts_REFRESH_DYAOP	BIT(3)
+#define AuOpts_REFRESH_DOP	BIT(4)
 #define au_ftest_opts(flags, name)	((flags) & AuOpts_##name)
 #define au_fset_opts(flags, name) \
 	do { (flags) |= AuOpts_##name; } while (0)

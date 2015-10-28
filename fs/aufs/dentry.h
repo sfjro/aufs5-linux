@@ -50,7 +50,7 @@ struct au_do_lookup_args {
 /* ---------------------------------------------------------------------- */
 
 /* dentry.c */
-extern const struct dentry_operations aufs_dop;
+extern const struct dentry_operations aufs_dop, aufs_dop_noreval;
 struct au_branch;
 struct dentry *au_sio_lkup_one(struct mnt_idmap *idmap, const struct qstr *name,
 			       struct path *ppath);
@@ -62,6 +62,7 @@ int au_lkup_dentry(struct dentry *dentry, aufs_bindex_t btop,
 int au_lkup_neg(struct dentry *dentry, aufs_bindex_t bindex, int wh);
 int au_refresh_dentry(struct dentry *dentry, struct dentry *parent);
 int au_reval_dpath(struct dentry *dentry, unsigned int sigen);
+void au_refresh_dop(struct dentry *dentry, int force_reval);
 
 /* dinfo.c */
 void au_di_init_once(void *_di);

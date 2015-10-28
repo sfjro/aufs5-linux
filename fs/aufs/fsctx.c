@@ -67,7 +67,8 @@ static int au_fsctx_reconfigure(struct fs_context *fc)
 	err = au_opts_remount(sb, &a->opts);
 
 	if (au_ftest_opts(a->opts.flags, REFRESH))
-		au_remount_refresh(sb);
+		au_remount_refresh(sb, au_ftest_opts(a->opts.flags,
+						     REFRESH_DOP));
 
 	if (au_ftest_opts(a->opts.flags, REFRESH_DYAOP)) {
 		mntflags = au_mntflags(sb);
@@ -128,6 +129,12 @@ static int au_fsctx_fill_super(struct super_block *sb, struct fs_context *fc)
 	aufs_write_lock(root);
 	err = au_opts_mount(sb, &a->opts);
 	AuTraceErr(err);
+	if (!err && au_ftest_si(sbinfo, NO_DREVAL)) {
+		set_default_d_op(sb, &aufs_dop_noreval);
+		/* infofc(fc, "%ps", sb->__s_d_op); */
+		pr_info("%ps\n", sb->__s_d_op);
+		au_refresh_dop(root, /*force_reval*/0);
+	}
 	aufs_write_unlock(root);
 	inode_unlock(inode);
 	if (!err)
