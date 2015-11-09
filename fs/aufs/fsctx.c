@@ -68,7 +68,7 @@ static int au_fsctx_reconfigure(struct fs_context *fc)
 
 	if (au_ftest_opts(a->opts.flags, REFRESH))
 		au_remount_refresh(sb, au_ftest_opts(a->opts.flags,
-						     REFRESH_DOP));
+						     REFRESH_IDOP));
 
 	if (au_ftest_opts(a->opts.flags, REFRESH_DYAOP)) {
 		mntflags = au_mntflags(sb);
@@ -134,6 +134,8 @@ static int au_fsctx_fill_super(struct super_block *sb, struct fs_context *fc)
 		/* infofc(fc, "%ps", sb->__s_d_op); */
 		pr_info("%ps\n", sb->__s_d_op);
 		au_refresh_dop(root, /*force_reval*/0);
+		sbinfo->si_iop_array = aufs_iop_nogetattr;
+		au_refresh_iop(inode, /*force_getattr*/0);
 	}
 	aufs_write_unlock(root);
 	inode_unlock(inode);
