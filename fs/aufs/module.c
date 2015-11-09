@@ -172,6 +172,10 @@ static int __init aufs_init(void)
 
 	au_dir_roflags = au_file_roflags(O_DIRECTORY | O_LARGEFILE);
 
+	memcpy(aufs_iop_nogetattr, aufs_iop, sizeof(aufs_iop));
+	for (i = 0; i < AuIop_Last; i++)
+		aufs_iop_nogetattr[i].getattr = NULL;
+
 	memset(au_cache, 0, sizeof(au_cache));	/* including hnotify */
 
 	au_sbilist_init();

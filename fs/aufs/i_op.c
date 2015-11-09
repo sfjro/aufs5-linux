@@ -1119,7 +1119,9 @@ static int aufs_update_time(struct inode *inode, int flags)
 
 /* ---------------------------------------------------------------------- */
 
-struct inode_operations aufs_iop[] = {
+/* no getattr version will be set by module.c:aufs_init() */
+struct inode_operations aufs_iop_nogetattr[AuIop_Last],
+	aufs_iop[] = {
 	[AuIop_SYMLINK] = {
 		.permission	= aufs_permission,
 		.setattr	= aufs_setattr,
