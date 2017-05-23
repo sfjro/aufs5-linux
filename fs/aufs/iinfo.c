@@ -161,12 +161,26 @@ void au_iinfo_fin(struct inode *inode)
 {
 	struct au_iinfo *iinfo;
 	struct au_hinode *hi;
+	struct super_block *sb;
 	aufs_bindex_t bindex, bbot;
 	const unsigned char unlinked = !vfsub_inode_nlink(inode, AU_I_AUFS);
 
 	AuDebugOn(au_is_bad_inode(inode));
 
-	au_xino_delete_inode(inode, unlinked);
+	sb = inode->i_sb;
+	if (si_pid_test(sb))
+		au_xino_delete_inode(inode, unlinked);
+	else {
+		/*
+		 * it is safe to hide the dependency between sbinfo and
+		 * sb->s_umount.
+		 */
+		lockdep_off();
+		si_noflush_read_lock(sb);
+		au_xino_delete_inode(inode, unlinked);
+		si_read_unlock(sb);
+		lockdep_on();
+	}
 
 	iinfo = au_ii(inode);
 	bindex = iinfo->ii_btop;

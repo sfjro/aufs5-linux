@@ -188,6 +188,33 @@ AuStubVoid(au_sbilist_del, struct super_block *sb)
 
 /* ---------------------------------------------------------------------- */
 
+/* current->atomic_flags */
+/* this value should never corrupt the ones defined in linux/sched.h */
+#define PFA_AUFS	0x10
+
+TASK_PFA_TEST(AUFS, test_aufs)	/* task_test_aufs */
+TASK_PFA_SET(AUFS, aufs)	/* task_set_aufs */
+TASK_PFA_CLEAR(AUFS, aufs)	/* task_clear_aufs */
+
+static inline int si_pid_test(struct super_block *sb)
+{
+	return !!task_test_aufs(current);
+}
+
+static inline void si_pid_clr(struct super_block *sb)
+{
+	AuDebugOn(!task_test_aufs(current));
+	task_clear_aufs(current);
+}
+
+static inline void si_pid_set(struct super_block *sb)
+{
+	AuDebugOn(task_test_aufs(current));
+	task_set_aufs(current);
+}
+
+/* ---------------------------------------------------------------------- */
+
 /* lock superblock. mainly for entry point functions */
 #define __si_read_lock(sb)	au_rw_read_lock(&au_sbi(sb)->si_rwsem)
 #define __si_write_lock(sb)	au_rw_write_lock(&au_sbi(sb)->si_rwsem)
@@ -211,23 +238,33 @@ AuStubVoid(au_sbilist_del, struct super_block *sb)
 static inline void si_noflush_read_lock(struct super_block *sb)
 {
 	__si_read_lock(sb);
-	/* re-commit later */
+	si_pid_set(sb);
 }
 
 static inline int si_noflush_read_trylock(struct super_block *sb)
 {
-	return __si_read_trylock(sb);	/* re-commit later */
+	int locked;
+
+	locked = __si_read_trylock(sb);
+	if (locked)
+		si_pid_set(sb);
+	return locked;
 }
 
 static inline void si_noflush_write_lock(struct super_block *sb)
 {
 	__si_write_lock(sb);
-	/* re-commit later */
+	si_pid_set(sb);
 }
 
 static inline int si_noflush_write_trylock(struct super_block *sb)
 {
-	return __si_write_trylock(sb);	/* re-commit later */
+	int locked;
+
+	locked = __si_write_trylock(sb);
+	if (locked)
+		si_pid_set(sb);
+	return locked;
 }
 
 #if 0 /* reserved */
@@ -241,7 +278,7 @@ static inline int si_read_trylock(struct super_block *sb, int flags)
 
 static inline void si_read_unlock(struct super_block *sb)
 {
-	/* re-commit later */
+	si_pid_clr(sb);
 	__si_read_unlock(sb);
 }
 
@@ -256,7 +293,7 @@ static inline int si_write_trylock(struct super_block *sb, int flags)
 
 static inline void si_write_unlock(struct super_block *sb)
 {
-	/* re-commit later */
+	si_pid_clr(sb);
 	__si_write_unlock(sb);
 }
 
