@@ -43,6 +43,16 @@ struct au_xino {
 	struct kref		xi_kref;
 };
 
+/* File-based Hierarchical Storage Management */
+struct au_br_fhsm {
+#ifdef CONFIG_AUFS_FHSM
+	struct mutex		bf_lock;
+	unsigned long		bf_jiffy;
+	struct aufs_stfs	bf_stfs;
+	int			bf_readable;
+#endif
+};
+
 /* members for writable branch only */
 enum {AuBrWh_BASE, AuBrWh_PLINK, AuBrWh_ORPH, AuBrWh_Last};
 struct au_wbr {
@@ -93,6 +103,7 @@ struct au_branch {
 	au_lcnt_t		br_count;	/* in-use for other */
 
 	struct au_wbr		*br_wbr;
+	struct au_br_fhsm	*br_fhsm;
 
 #ifdef CONFIG_AUFS_HFSNOTIFY
 	struct au_br_hfsnotify	*br_hfsn;
@@ -327,6 +338,25 @@ static inline int au_sbr_whable(struct super_block *sb, aufs_bindex_t bindex)
 #define WbrWhMustNoWaiters(wbr)	AuRwMustNoWaiters(&(wbr)->wbr_wh_rwsem)
 #define WbrWhMustAnyLock(wbr)	AuRwMustAnyLock(&(wbr)->wbr_wh_rwsem)
 #define WbrWhMustWriteLock(wbr)	AuRwMustWriteLock(&(wbr)->wbr_wh_rwsem)
+
+/* ---------------------------------------------------------------------- */
+
+#ifdef CONFIG_AUFS_FHSM
+static inline void au_br_fhsm_init(struct au_br_fhsm *brfhsm)
+{
+	mutex_init(&brfhsm->bf_lock);
+	brfhsm->bf_jiffy = 0;
+	brfhsm->bf_readable = 0;
+}
+
+static inline void au_br_fhsm_fin(struct au_br_fhsm *brfhsm)
+{
+	mutex_destroy(&brfhsm->bf_lock);
+}
+#else
+AuStubVoid(au_br_fhsm_init, struct au_br_fhsm *brfhsm)
+AuStubVoid(au_br_fhsm_fin, struct au_br_fhsm *brfhsm)
+#endif
 
 #endif /* __KERNEL__ */
 #endif /* __AUFS_BRANCH_H__ */

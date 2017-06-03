@@ -110,6 +110,7 @@ out:
 long aufs_ioctl_dir(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	long err;
+	struct dentry *dentry;
 
 	switch (cmd) {
 	case AUFS_CTL_RDU:
@@ -127,6 +128,14 @@ long aufs_ioctl_dir(struct file *file, unsigned int cmd, unsigned long arg)
 
 	case AUFS_CTL_BRINFO:
 		err = au_brinfo_ioctl(file, arg);
+		break;
+
+	case AUFS_CTL_FHSM_FD:
+		dentry = file->f_path.dentry;
+		if (IS_ROOT(dentry))
+			err = au_fhsm_fd(dentry->d_sb, arg);
+		else
+			err = -ENOTTY;
 		break;
 
 	default:

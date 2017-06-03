@@ -38,6 +38,11 @@ static void au_br_do_free(struct au_branch *br)
 		AuRwDestroy(&wbr->wbr_wh_rwsem);
 	}
 
+	if (br->br_fhsm) {
+		au_br_fhsm_fin(br->br_fhsm);
+		au_kfree_try_rcu(br->br_fhsm);
+	}
+
 	key = br->br_dykey;
 	for (i = 0; i < AuBrDynOp; i++, key++)
 		if (*key)
@@ -136,6 +141,12 @@ static struct au_branch *au_br_alloc(struct super_block *sb, int new_nbranch,
 			goto out_hnotify;
 	}
 
+	if (au_br_fhsm(perm)) {
+		err = au_fhsm_br_alloc(add_branch);
+		if (unlikely(err))
+			goto out_wbr;
+	}
+
 	root = sb->s_root;
 	err = au_sbr_realloc(au_sbi(sb), new_nbranch, /*may_shrink*/0);
 	if (!err)
@@ -148,8 +159,8 @@ static struct au_branch *au_br_alloc(struct super_block *sb, int new_nbranch,
 	if (!err)
 		return add_branch; /* success */
 
+out_wbr:
 	au_kfree_rcu(add_branch->br_wbr);
-
 out_hnotify:
 	au_hnotify_fin_br(add_branch);
 out_xino:
@@ -1286,6 +1297,7 @@ int au_br_mod(struct super_block *sb, struct au_opt_mod *mod, int remount,
 	aufs_bindex_t bindex;
 	struct dentry *root;
 	struct au_branch *br;
+	struct au_br_fhsm *bf;
 
 	root = sb->s_root;
 	bindex = au_find_dbindex(root, mod->h_root);
@@ -1307,11 +1319,21 @@ int au_br_mod(struct super_block *sb, struct au_opt_mod *mod, int remount,
 	if (br->br_perm == mod->perm)
 		return 0; /* success */
 
+	/* pre-allocate for non-fhsm --> fhsm */
+	bf = NULL;
+	if (!au_br_fhsm(br->br_perm) && au_br_fhsm(mod->perm)) {
+		err = au_fhsm_br_alloc(br);
+		if (unlikely(err))
+			goto out;
+		bf = br->br_fhsm;
+		br->br_fhsm = NULL;
+	}
+
 	if (au_br_writable(br->br_perm)) {
 		/* remove whiteout base */
 		err = au_br_init_wh(sb, br, mod->perm);
 		if (unlikely(err))
-			goto out;
+			goto out_bf;
 
 		if (!au_br_writable(mod->perm)) {
 			/* rw --> ro, file might be mmapped */
@@ -1348,12 +1370,25 @@ int au_br_mod(struct super_block *sb, struct au_opt_mod *mod, int remount,
 		}
 	}
 	if (unlikely(err))
-		goto out;
+		goto out_bf;
+
+	if (au_br_fhsm(br->br_perm)) {
+		if (!au_br_fhsm(mod->perm)) {
+			/* fhsm --> non-fhsm */
+			au_br_fhsm_fin(br->br_fhsm);
+			au_kfree_rcu(br->br_fhsm);
+			br->br_fhsm = NULL;
+		}
+	} else if (au_br_fhsm(mod->perm))
+		/* non-fhsm --> fhsm */
+		br->br_fhsm = bf;
 
 	*do_refresh |= need_sigen_inc(br->br_perm, mod->perm);
 	br->br_perm = mod->perm;
 	goto out; /* success */
 
+out_bf:
+	au_kfree_try_rcu(bf);
 out:
 	AuTraceErr(err);
 	return err;
