@@ -647,6 +647,7 @@ struct inode_operations aufs_iop[] = {
 	[AuIop_DIR] = {
 		.create		= aufs_create,
 		.lookup		= aufs_lookup,
+		.unlink		= aufs_unlink,
 		.symlink	= aufs_symlink,
 		.mkdir		= aufs_mkdir,
 		.mknod		= aufs_mknod,
