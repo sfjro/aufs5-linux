@@ -103,6 +103,10 @@ struct au_branch {
 	struct au_brsysfs	br_sysfs[AuBrSysfs_Last];
 #endif
 
+#ifdef CONFIG_DEBUG_FS
+	struct dentry		 *br_dbgaufs; /* xino */
+#endif
+
 	struct au_dr_br		br_dirren;
 };
 

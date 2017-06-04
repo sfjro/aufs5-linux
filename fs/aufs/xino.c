@@ -1530,6 +1530,7 @@ void au_xino_clr(struct super_block *sb)
 	au_xigen_clr(sb);
 	xino_clear_xib(sb);
 	xino_clear_br(sb);
+	dbgaufs_brs_del(sb, 0);
 	sbinfo = au_sbi(sb);
 	/* lvalue, do not call au_mntflags() */
 	au_opt_clr(sbinfo->si_mntflags, XINO);
@@ -1575,8 +1576,10 @@ int au_xino_set(struct super_block *sb, struct au_opt_xino *xiopt, int remount)
 		err = au_xigen_set(sb, path);
 	if (!err)
 		err = au_xino_set_br(sb, path);
-	if (!err)
+	if (!err) {
+		dbgaufs_brs_add(sb, 0, /*topdown*/1);
 		goto out; /* success */
+	}
 
 	/* reset all */
 	AuIOErr("failed setting xino(%d).\n", err);

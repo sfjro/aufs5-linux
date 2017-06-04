@@ -25,6 +25,7 @@
 #include "branch.h"
 #include "cpup.h"
 #include "dcsub.h"
+#include "dbgaufs.h"
 #include "dentry.h"
 #include "dir.h"
 #include "dirren.h"
@@ -42,7 +43,6 @@
 #include "vfsub.h"
 #include "whout.h"
 #include "wkq.h"
-/* add more later */
 
 #endif /* __KERNEL__ */
 #endif /* __AUFS_H__ */
