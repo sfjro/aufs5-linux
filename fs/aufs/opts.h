@@ -32,6 +32,7 @@ enum {
 	Opt_verbose, Opt_noverbose,
 	Opt_sum, Opt_wsum,
 	Opt_dirperm1,
+	Opt_dirren,
 	Opt_acl,
 	Opt_tail, Opt_ignore, Opt_ignore_silent, Opt_err
 };
@@ -187,11 +188,17 @@ struct au_opt {
 #define AuOpts_TRUNC_XIB	BIT(2)
 #define AuOpts_REFRESH_DYAOP	BIT(3)
 #define AuOpts_REFRESH_IDOP	BIT(4)
+#define AuOpts_DR_FLUSHED	BIT(5)
 #define au_ftest_opts(flags, name)	((flags) & AuOpts_##name)
 #define au_fset_opts(flags, name) \
 	do { (flags) |= AuOpts_##name; } while (0)
 #define au_fclr_opts(flags, name) \
 	do { (flags) &= ~AuOpts_##name; } while (0)
+
+#ifndef CONFIG_AUFS_DIRREN
+#undef AuOpts_DR_FLUSHED
+#define AuOpts_DR_FLUSHED	0
+#endif
 
 struct au_opts {
 	struct au_opt	*opt;

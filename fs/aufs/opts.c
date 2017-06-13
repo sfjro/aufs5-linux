@@ -551,6 +551,28 @@ static int au_opt_simple(struct super_block *sb, struct au_opt *opt,
 			au_fclr_opts(opts->flags, TRUNC_XIB);
 		break;
 
+	case Opt_dirren:
+		err = 1;
+		if (opt->tf) {
+			if (!au_opt_test(sbinfo->si_mntflags, DIRREN)) {
+				err = au_dr_opt_set(sb);
+				if (!err)
+					err = 1;
+			}
+			if (err == 1)
+				au_opt_set(sbinfo->si_mntflags, DIRREN);
+		} else {
+			if (au_opt_test(sbinfo->si_mntflags, DIRREN)) {
+				err = au_dr_opt_clr(sb, au_ftest_opts(opts->flags,
+								      DR_FLUSHED));
+				if (!err)
+					err = 1;
+			}
+			if (err == 1)
+				au_opt_clr(sbinfo->si_mntflags, DIRREN);
+		}
+		break;
+
 	case Opt_acl:
 		if (opt->tf)
 			sb->s_flags |= SB_POSIXACL;
@@ -869,7 +891,11 @@ int au_opts_remount(struct super_block *sb, struct au_opts *opts)
 
 	SiMustWriteLock(sb);
 
-	err = 0;
+	err = au_dr_opt_flush(sb);
+	if (unlikely(err))
+		goto out;
+	au_fset_opts(opts->flags, DR_FLUSHED);
+
 	dir = d_inode(sb->s_root);
 	sbinfo = au_sbi(sb);
 	opt_xino = NULL;
@@ -911,6 +937,7 @@ int au_opts_remount(struct super_block *sb, struct au_opts *opts)
 
 	AuDbg("status 0x%x\n", opts->flags);
 
+out:
 	return err;
 }
 

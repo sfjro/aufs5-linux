@@ -252,6 +252,7 @@ static void au_fsctx_dump(struct au_opts *opts)
 		au_fsctx_TF(dio);
 		au_fsctx_TF(verbose);
 		au_fsctx_TF(sum);
+		au_fsctx_TF(dirren);
 		au_fsctx_TF(acl);
 #undef au_fsctx_TF
 
@@ -365,6 +366,12 @@ const struct fs_parameter_spec aufs_fsctx_paramspec[] = {
 	fsparam_string("udba", Opt_udba),
 
 	fsparam_flag_no("dio", Opt_dio),
+
+#ifdef CONFIG_AUFS_DIRREN
+	fsparam_flag_no("dirren", Opt_dirren),
+#else
+	au_ignore_flag("dirren", Opt_ignore),
+#endif
 
 	fsparam_flag_no("dirperm1", Opt_dirperm1),
 
@@ -925,6 +932,7 @@ static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *para
 	au_fsctx_TF(dio);
 	au_fsctx_TF(verbose);
 	au_fsctx_TF(sum);
+	au_fsctx_TF(dirren);
 	au_fsctx_TF(acl);
 #undef au_fsctx_TF
 
