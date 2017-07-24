@@ -52,10 +52,15 @@ enum {
 #define AuOpt_SUM_W		BIT(10)		/* unimplemented */
 #define AuOpt_VERBOSE		BIT(12)		/* print the cause of error */
 #define AuOpt_DIO		BIT(13)		/* direct io */
+#define AuOpt_DIRREN		BIT(14)		/* directory rename */
 
 #ifndef CONFIG_AUFS_HNOTIFY
 #undef AuOpt_UDBA_HNOTIFY
 #define AuOpt_UDBA_HNOTIFY	0
+#endif
+#ifndef CONFIG_AUFS_DIRREN
+#undef AuOpt_DIRREN
+#define AuOpt_DIRREN		0
 #endif
 
 #define AuOpt_Def	(AuOpt_XINO \
