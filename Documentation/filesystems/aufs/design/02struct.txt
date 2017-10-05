@@ -1,0 +1,39 @@
+
+# Copyright (C) 2005-2026 Junjiro R. Okajima
+
+Basic Aufs Internal Structure
+
+Superblock/Inode/Dentry/File Objects
+----------------------------------------------------------------------
+As like an ordinary filesystem, aufs has its own
+superblock/inode/dentry/file objects. All these objects have a
+dynamically allocated array and store the same kind of pointers to the
+lower filesystem, branch.
+For example, when you build a union with one readwrite branch and one
+readonly, mounted /au, /rw and /ro respectively.
+- /au = /rw + /ro
+- /ro/fileA exists but /rw/fileA
+
+Aufs lookup operation finds /ro/fileA and gets dentry for that. These
+pointers are stored in a aufs dentry. The array in aufs dentry will be,
+- [0] = NULL (because /rw/fileA doesn't exist)
+- [1] = /ro/fileA
+
+This style of an array is essentially same to the aufs
+superblock/inode/dentry/file objects.
+
+Because aufs supports manipulating branches, ie. add/delete/change
+branches dynamically, these objects has its own generation. When
+branches are changed, the generation in aufs superblock is
+incremented. And a generation in other object are compared when it is
+accessed. When a generation in other objects are obsoleted, aufs
+refreshes the internal array.
+
+
+Superblock
+----------------------------------------------------------------------
+Additionally aufs superblock has some data for policies to select one
+among multiple writable branches, XIB files, pseudo-links and kobject.
+See below in detail.
+About the policies which supports copy-down a directory, see
+wbr_policy.txt too.

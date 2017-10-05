@@ -67,6 +67,40 @@ void *au_kzrealloc(void *p, unsigned int nused, unsigned int new_sz, gfp_t gfp,
 
 /* ---------------------------------------------------------------------- */
 /*
+ * aufs caches
+ */
+struct kmem_cache *au_cache[AuCache_Last];
+
+static void au_cache_fin(void)
+{
+	int i;
+
+	/*
+	 * Make sure all delayed rcu free inodes are flushed before we
+	 * destroy cache.
+	 */
+	rcu_barrier();
+	for (i = 0; i < AuCache_Last; i++) {
+		kmem_cache_destroy(au_cache[i]);
+		au_cache[i] = NULL;
+	}
+}
+
+static int __init au_cache_init(void)
+{
+	/* SLAB_DESTROY_BY_RCU */
+	au_cache[AuCache_ICNTNR] = AuCacheCtor(au_icntnr,
+					       au_icntnr_init_once);
+	if (au_cache[AuCache_ICNTNR])
+		return 0;
+
+	au_cache_fin();
+	return -ENOMEM;
+}
+
+/* ---------------------------------------------------------------------- */
+
+/*
  * functions for module interface.
  */
 MODULE_LICENSE("GPL");
@@ -80,10 +114,19 @@ MODULE_VERSION(AUFS_VERSION);
 
 static int __init aufs_init(void)
 {
+	int err;
+
+	memset(au_cache, 0, sizeof(au_cache));
+
+	err = au_cache_init();
+	if (unlikely(err))
+		goto out;
+
 	/* since we define pr_fmt, call printk directly */
 	printk(KERN_INFO AUFS_NAME " " AUFS_VERSION "\n");
 
-	return 0;
+out:
+	return err;
 }
 
 module_init(aufs_init);
