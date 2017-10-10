@@ -66,5 +66,9 @@ static inline void vfsub_inode_nlink_init(struct inode *inode,
 	inode->__i_nlink = nlink;
 }
 
+/* ---------------------------------------------------------------------- */
+
+int vfsub_kern_path(const char *name, unsigned int flags, struct path *path);
+
 #endif /* __KERNEL__ */
 #endif /* __AUFS_VFSUB_H__ */

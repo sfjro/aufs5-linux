@@ -18,6 +18,11 @@ void au_si_free(struct kobject *kobj)
 	struct au_sbinfo *sbinfo;
 
 	sbinfo = container_of(kobj, struct au_sbinfo, si_kobj);
+
+	au_rw_write_lock(&sbinfo->si_rwsem);
+	au_br_free(sbinfo);
+	au_rw_write_unlock(&sbinfo->si_rwsem);
+
 	au_kfree_try_rcu(sbinfo->si_branch);
 	AuRwDestroy(&sbinfo->si_rwsem);
 
@@ -54,6 +59,27 @@ out_sbinfo:
 	au_kfree_rcu(sbinfo);
 out:
 	return ERR_PTR(err);
+}
+
+int au_sbr_realloc(struct au_sbinfo *sbinfo, int nbr, int may_shrink)
+{
+	int err, sz;
+	struct au_branch **brp;
+
+	AuRwMustWriteLock(&sbinfo->si_rwsem);
+
+	err = -ENOMEM;
+	sz = sizeof(*brp) * (sbinfo->si_bbot + 1);
+	if (unlikely(!sz))
+		sz = sizeof(*brp);
+	brp = au_kzrealloc(sbinfo->si_branch, sz, sizeof(*brp) * nbr, GFP_NOFS,
+			   may_shrink);
+	if (brp) {
+		sbinfo->si_branch = brp;
+		err = 0;
+	}
+
+	return err;
 }
 
 /* ---------------------------------------------------------------------- */
