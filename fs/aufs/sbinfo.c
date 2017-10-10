@@ -42,6 +42,7 @@ struct au_sbinfo *au_si_alloc(struct super_block *sb)
 	au_rw_init_wlock(&sbinfo->si_rwsem);
 
 	sbinfo->si_bbot = -1;
+	sbinfo->si_last_br_id = AUFS_BRANCH_MAX / 2;
 
 	/* leave other members for sysaufs and si_mnt. */
 	if (sb)
@@ -70,4 +71,23 @@ unsigned int au_sigen_inc(struct super_block *sb)
 	au_update_iigen(inode, /*half*/0);
 	inode_inc_iversion(inode);
 	return gen;
+}
+
+aufs_bindex_t au_new_br_id(struct super_block *sb)
+{
+	aufs_bindex_t br_id;
+	int i;
+	struct au_sbinfo *sbinfo;
+
+	SiMustWriteLock(sb);
+
+	sbinfo = au_sbi(sb);
+	for (i = 0; i <= AUFS_BRANCH_MAX; i++) {
+		br_id = ++sbinfo->si_last_br_id;
+		AuDebugOn(br_id < 0);
+		if (br_id && au_br_index(sb, br_id) < 0)
+			return br_id;
+	}
+
+	return -1;
 }

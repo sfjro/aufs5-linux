@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 
+include ${src}/magic.mk
 -include ${src}/priv_def.mk
 
 # For aufs as an outsider, it is still useful to specify CFLAGS from
@@ -12,7 +13,7 @@ ccflags-y += -DDEBUG
 ccflags-y += -include ${srctree}/include/uapi/linux/aufs_type.h
 
 obj-$(CONFIG_AUFS_FS) += aufs.o
-aufs-y := module.o sbinfo.o super.o \
+aufs-y := module.o sbinfo.o super.o branch.o \
 	vfsub.o dcsub.o \
 	cpup.o \
 	dinfo.o \
