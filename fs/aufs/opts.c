@@ -8,7 +8,6 @@
  */
 
 #include <linux/file.h>
-#include <linux/namei.h>
 #include <linux/types.h> /* a distribution requires */
 #include <linux/parser.h>
 #include "aufs.h"
@@ -190,6 +189,52 @@ out:
 }
 
 /*
+ * returns,
+ * plus: processed without an error
+ * zero: unprocessed
+ */
+static int au_opt_simple(struct super_block *sb, struct au_opt *opt,
+			 struct au_opts *opts)
+{
+	int err;
+	struct au_sbinfo *sbinfo;
+
+	SiMustWriteLock(sb);
+
+	err = 1; /* handled */
+	sbinfo = au_sbi(sb);
+	switch (opt->type) {
+	case Opt_trunc_xino:
+		if (opt->tf)
+			au_opt_set(sbinfo->si_mntflags, TRUNC_XINO);
+		else
+			au_opt_clr(sbinfo->si_mntflags, TRUNC_XINO);
+		break;
+
+	case Opt_trunc_xino_path:
+	case Opt_itrunc_xino:
+		err = au_xino_trunc(sb, opt->xino_itrunc.bindex,
+				    /*idx_begin*/0);
+		if (!err)
+			err = 1;
+		break;
+
+	case Opt_trunc_xib:
+		if (opt->tf)
+			au_fset_opts(opts->flags, TRUNC_XIB);
+		else
+			au_fclr_opts(opts->flags, TRUNC_XIB);
+		break;
+
+	default:
+		err = 0;
+		break;
+	}
+
+	return err;
+}
+
+/*
  * returns tri-state.
  * plus: processed without an error
  * zero: unprocessed
@@ -250,9 +295,7 @@ int au_opts_mount(struct super_block *sb, struct au_opts *opts)
 	opt_xino = NULL;
 	opt = opts->opt;
 	while (err >= 0 && opt->type != Opt_tail)
-		/* re-commit later */
-		/* err = au_opt_simple(sb, opt++, opts); */
-		err = 0;
+		err = au_opt_simple(sb, opt++, opts);
 	if (err > 0)
 		err = 0;
 	else if (unlikely(err < 0))

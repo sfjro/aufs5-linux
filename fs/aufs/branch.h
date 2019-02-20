@@ -35,6 +35,8 @@ struct au_xino {
 	struct mutex		xi_mtx;	/* protects xi_file array */
 	struct hlist_bl_head	xi_writing;
 
+	atomic_t		xi_truncating;
+
 	struct kref		xi_kref;
 };
 
@@ -134,6 +136,9 @@ int au_xino_write(struct super_block *sb, aufs_bindex_t bindex, ino_t h_ino,
 		  ino_t ino);
 ssize_t xino_fread(struct file *file, void *buf, size_t size, loff_t *pos);
 ssize_t xino_fwrite(struct file *file, void *buf, size_t size, loff_t *pos);
+
+int au_xib_trunc(struct super_block *sb);
+int au_xino_trunc(struct super_block *sb, aufs_bindex_t bindex, int idx_begin);
 
 struct au_xino *au_xino_alloc(unsigned int nfile);
 int au_xino_put(struct au_branch *br);

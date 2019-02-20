@@ -58,6 +58,9 @@ struct au_sbinfo *au_si_alloc(struct super_block *sb)
 
 	sbinfo->si_mntflags = AuOpt_Def;
 
+	sbinfo->si_xino_jiffy = jiffies;
+	sbinfo->si_xino_expire
+		= msecs_to_jiffies(AUFS_XINO_DEF_SEC * MSEC_PER_SEC);
 	mutex_init(&sbinfo->si_xib_mtx);
 	/* leave si_xib_last_pindex and si_xib_next_bit */
 
