@@ -38,6 +38,18 @@ struct au_xino {
 	struct kref		xi_kref;
 };
 
+/* sysfs entries */
+struct au_brsysfs {
+	char			name[16];
+	struct attribute	attr;
+};
+
+enum {
+	AuBrSysfs_BR,
+	AuBrSysfs_BRID,
+	AuBrSysfs_Last
+};
+
 /* protected by superblock rwsem */
 struct au_branch {
 	struct au_xino		*br_xino;
@@ -47,6 +59,11 @@ struct au_branch {
 	int			br_perm;
 	struct path		br_path;
 	au_lcnt_t		br_count;	/* in-use for other */
+
+#ifdef CONFIG_SYSFS
+	/* entries under sysfs per mount-point */
+	struct au_brsysfs	br_sysfs[AuBrSysfs_Last];
+#endif
 };
 
 /* ---------------------------------------------------------------------- */
@@ -131,6 +148,8 @@ int au_xino_init_br(struct super_block *sb, struct au_branch *br, ino_t hino,
 
 ino_t au_xino_new_ino(struct super_block *sb);
 void au_xino_delete_inode(struct inode *inode, const int unlinked);
+
+int au_xino_path(struct seq_file *seq, struct file *file);
 
 /* ---------------------------------------------------------------------- */
 

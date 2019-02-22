@@ -8,6 +8,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/seq_file.h>
 #include "aufs.h"
 
 /* shrinkable realloc */
@@ -112,17 +113,51 @@ MODULE_DESCRIPTION(AUFS_NAME
 	" -- Advanced multi layered unification filesystem");
 MODULE_VERSION(AUFS_VERSION);
 
+/* this module parameter has no meaning when SYSFS is disabled */
+int sysaufs_brs = 1;
+MODULE_PARM_DESC(brs, "use <sysfs>/fs/aufs/si_*/brN");
+module_param_named(brs, sysaufs_brs, int, 0444);
+
+/* ---------------------------------------------------------------------- */
+
+static char au_esc_chars[0x20 + 3]; /* 0x01-0x20, backslash, del, and NULL */
+
+int au_seq_path(struct seq_file *seq, const struct path *path)
+{
+	int err;
+
+	err = seq_path(seq, path, au_esc_chars);
+	if (err >= 0)
+		err = 0;
+	else
+		err = -ENOMEM;
+
+	return err;
+}
+
 /* ---------------------------------------------------------------------- */
 
 static int __init aufs_init(void)
 {
-	int err;
+	int err, i;
+	char *p;
+
+	p = au_esc_chars;
+	for (i = 1; i <= ' '; i++)
+		*p++ = i;
+	*p++ = '\\';
+	*p++ = '\x7f';
+	*p = 0;
 
 	memset(au_cache, 0, sizeof(au_cache));
 
-	err = au_wkq_init();
+	sysaufs_brs_init();
+	err = sysaufs_init();
 	if (unlikely(err))
 		goto out;
+	err = au_wkq_init();
+	if (unlikely(err))
+		goto out_sysaufs;
 	err = au_cache_init();
 	if (unlikely(err))
 		goto out_wkq;
@@ -133,6 +168,8 @@ static int __init aufs_init(void)
 
 out_wkq:
 	au_wkq_fin();
+out_sysaufs:
+	sysaufs_fin();
 out:
 	return err;
 }
