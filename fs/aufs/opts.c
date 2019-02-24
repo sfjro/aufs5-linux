@@ -479,6 +479,13 @@ static int au_opt_simple(struct super_block *sb, struct au_opt *opt,
 			pr_warn_once("ignored nodio\n");
 		break;
 
+	case Opt_verbose:
+		if (opt->tf)
+			au_opt_set(sbinfo->si_mntflags, VERBOSE);
+		else
+			au_opt_clr(sbinfo->si_mntflags, VERBOSE);
+		break;
+
 	case Opt_wbr_create:
 		err = au_opt_wbr_create(sb, &opt->wbr_create);
 		break;
@@ -563,6 +570,17 @@ static int au_opt_br(struct super_block *sb, struct au_opt *opt,
 				au_ftest_opts(opts->flags, REMOUNT));
 		if (!err) {
 			err = 1;
+			au_fset_opts(opts->flags, REFRESH);
+		}
+		break;
+
+	case Opt_del:
+	case Opt_idel:
+		err = au_br_del(sb, &opt->del,
+				au_ftest_opts(opts->flags, REMOUNT));
+		if (!err) {
+			err = 1;
+			au_fset_opts(opts->flags, TRUNC_XIB);
 			au_fset_opts(opts->flags, REFRESH);
 		}
 		break;

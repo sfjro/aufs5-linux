@@ -208,9 +208,7 @@ int cpup_iattr(struct dentry *dst, aufs_bindex_t bindex, struct path *h_src,
 	icex = br->br_perm & AuBrAttr_ICEX;
 	if (!err) {
 		mnt_flags = au_mntflags(dst->d_sb);
-		/* re-commit later */
-		/* verbose = !!au_opt_test(mnt_flags, VERBOSE); */
-		verbose = 0;
+		verbose = !!au_opt_test(mnt_flags, VERBOSE);
 		err = au_cpup_xattr(&h_path, h_src, icex, verbose);
 	}
 

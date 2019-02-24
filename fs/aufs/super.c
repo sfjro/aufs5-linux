@@ -269,6 +269,8 @@ static int aufs_show_options(struct seq_file *m, struct dentry *dentry)
 	AuUInt(RDBLK, rdblk, sbinfo->si_rdblk);
 	AuUInt(RDHASH, rdhash, sbinfo->si_rdhash);
 
+	AuBool(VERBOSE, verbose);
+
 out:
 	/* be sure to print "br:" last */
 	if (!sysaufs_brs) {

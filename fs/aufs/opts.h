@@ -18,7 +18,8 @@
 
 enum {
 	Opt_br,
-	Opt_add, Opt_append, Opt_prepend,
+	Opt_add, Opt_del, Opt_append, Opt_prepend,
+	Opt_idel,
 	Opt_rdcache, Opt_rdblk, Opt_rdhash,
 	Opt_xino, Opt_noxino,
 	Opt_trunc_xino, Opt_trunc_xino_v,
@@ -28,6 +29,7 @@ enum {
 	Opt_udba,
 	Opt_dio,
 	Opt_wbr_copyup, Opt_wbr_create,
+	Opt_verbose, Opt_noverbose,
 	Opt_acl,
 	Opt_tail, Opt_ignore, Opt_ignore_silent, Opt_err
 };
@@ -42,6 +44,7 @@ enum {
 #define AuOpt_UDBA_REVAL	BIT(3)
 #define AuOpt_UDBA_HNOTIFY	BIT(4)
 #define AuOpt_PLINK		BIT(6)		/* pseudo-link */
+#define AuOpt_VERBOSE		BIT(12)		/* print the cause of error */
 #define AuOpt_DIO		BIT(13)		/* direct io */
 
 #ifndef CONFIG_AUFS_HNOTIFY
@@ -146,6 +149,7 @@ struct au_opt {
 		struct au_opt_xino	xino;
 		struct au_opt_xino_itrunc xino_itrunc;
 		struct au_opt_add	add;
+		struct au_opt_del	del;
 		int			rdcache;
 		unsigned int		rdblk;
 		unsigned int		rdhash;
