@@ -25,6 +25,15 @@ static inline const char *au_sbtype(struct super_block *sb)
 	return sb->s_type->name;
 }
 
+static inline int au_test_nfs(struct super_block *sb __maybe_unused)
+{
+#if IS_ENABLED(CONFIG_NFS_FS)
+	return sb->s_magic == NFS_SUPER_MAGIC;
+#else
+	return 0;
+#endif
+}
+
 static inline int au_test_ecryptfs(struct super_block *sb __maybe_unused)
 {
 #if IS_ENABLED(CONFIG_ECRYPT_FS)

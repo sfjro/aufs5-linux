@@ -33,6 +33,7 @@ typedef void (*au_wkq_func_t)(void *args);
 
 /* wkq flags */
 #define AuWkq_WAIT	BIT(0)
+#define AuWkq_NEST	BIT(1)
 #define au_ftest_wkq(flags, name)	((flags) & AuWkq_##name)
 #define au_fset_wkq(flags, name) \
 	do { (flags) |= AuWkq_##name; } while (0)
