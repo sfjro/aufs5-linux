@@ -122,6 +122,13 @@ struct au_xino *au_xino_alloc(unsigned int nfile);
 int au_xino_put(struct au_branch *br);
 struct file *au_xino_file1(struct au_xino *xi);
 
+struct au_opt_xino;
+void au_xino_clr(struct super_block *sb);
+int au_xino_set(struct super_block *sb, struct au_opt_xino *xiopt);
+struct file *au_xino_def(struct super_block *sb);
+int au_xino_init_br(struct super_block *sb, struct au_branch *br, ino_t hino,
+		    const struct path *base);
+
 ino_t au_xino_new_ino(struct super_block *sb);
 void au_xino_delete_inode(struct inode *inode, const int unlinked);
 

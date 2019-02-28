@@ -18,6 +18,7 @@
 enum {
 	Opt_br,
 	Opt_add,
+	Opt_xino, Opt_noxino,
 	Opt_tail, Opt_ignore, Opt_ignore_silent, Opt_err
 };
 
@@ -41,6 +42,8 @@ enum {
 
 /* ---------------------------------------------------------------------- */
 
+struct file;
+
 struct au_opt_add {
 	aufs_bindex_t	bindex;
 	char		*pathname;
@@ -48,9 +51,15 @@ struct au_opt_add {
 	struct path	path;
 };
 
+struct au_opt_xino {
+	char		*path;
+	struct file	*file;
+};
+
 struct au_opt {
 	int type;
 	union {
+		struct au_opt_xino	xino;
 		struct au_opt_add	add;
 		/* add more later */
 	};

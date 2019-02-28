@@ -24,6 +24,37 @@
 
 #include "aufs.h"
 
+static aufs_bindex_t sbr_find_shared(struct super_block *sb, aufs_bindex_t btop,
+				     aufs_bindex_t bbot,
+				     struct super_block *h_sb)
+{
+	/* todo: try binary-search if the branches are many */
+	for (; btop <= bbot; btop++)
+		if (h_sb == au_sbr_sb(sb, btop))
+			return btop;
+	return -1;
+}
+
+/*
+ * find another branch who is on the same filesystem of the specified
+ * branch{@btgt}. search until @bbot.
+ */
+static aufs_bindex_t is_sb_shared(struct super_block *sb, aufs_bindex_t btgt,
+				  aufs_bindex_t bbot)
+{
+	aufs_bindex_t bindex;
+	struct super_block *tgt_sb;
+
+	tgt_sb = au_sbr_sb(sb, btgt);
+	bindex = sbr_find_shared(sb, /*btop*/0, btgt - 1, tgt_sb);
+	if (bindex < 0)
+		bindex = sbr_find_shared(sb, btgt + 1, bbot, tgt_sb);
+
+	return bindex;
+}
+
+/* ---------------------------------------------------------------------- */
+
 /*
  * stop unnecessary notify events at creating xino files
  */
@@ -170,14 +201,12 @@ struct file *au_xino_create(struct super_block *sb, char *fpath, int silent,
 			pr_err("%s must be outside\n", fpath);
 		goto out;
 	}
-#if 0 /* re-commit later */
 	if (unlikely(au_test_fs_bad_xino(d->d_sb))) {
 		if (!silent)
 			pr_err("xino doesn't support %s(%s)\n",
 			       fpath, au_sbtype(d->d_sb));
 		goto out;
 	}
-#endif
 	return file; /* success */
 
 out:
@@ -902,7 +931,6 @@ out:
 	return xi;
 }
 
-/* re-commit later */ __maybe_unused
 static int au_xino_init(struct au_branch *br, int idx, struct file *file)
 {
 	int err;
@@ -971,6 +999,316 @@ int au_xino_put(struct au_branch *br)
 	}
 
 	return ret;
+}
+
+/* ---------------------------------------------------------------------- */
+
+/*
+ * xino mount option handlers
+ */
+
+/* xino bitmap */
+static void xino_clear_xib(struct super_block *sb)
+{
+	struct au_sbinfo *sbinfo;
+
+	SiMustWriteLock(sb);
+
+	sbinfo = au_sbi(sb);
+	if (sbinfo->si_xib)
+		fput(sbinfo->si_xib);
+	sbinfo->si_xib = NULL;
+	if (sbinfo->si_xib_buf)
+		free_page((unsigned long)sbinfo->si_xib_buf);
+	sbinfo->si_xib_buf = NULL;
+}
+
+static int au_xino_set_xib(struct super_block *sb, const struct path *path)
+{
+	int err;
+	loff_t pos;
+	struct au_sbinfo *sbinfo;
+	struct file *file;
+	struct super_block *xi_sb;
+
+	SiMustWriteLock(sb);
+
+	sbinfo = au_sbi(sb);
+	file = au_xino_create2(sb, path, sbinfo->si_xib);
+	err = PTR_ERR(file);
+	if (IS_ERR(file))
+		goto out;
+	if (sbinfo->si_xib)
+		fput(sbinfo->si_xib);
+	sbinfo->si_xib = file;
+	xi_sb = file_inode(file)->i_sb;
+	sbinfo->si_ximaxent = xi_sb->s_maxbytes;
+	if (unlikely(sbinfo->si_ximaxent < PAGE_SIZE)) {
+		err = -EIO;
+		pr_err("s_maxbytes(%llu) on %s is too small\n",
+		       (u64)sbinfo->si_ximaxent, au_sbtype(xi_sb));
+		goto out_unset;
+	}
+	sbinfo->si_ximaxent /= sizeof(ino_t);
+
+	err = -ENOMEM;
+	if (!sbinfo->si_xib_buf)
+		sbinfo->si_xib_buf = (void *)get_zeroed_page(GFP_NOFS);
+	if (unlikely(!sbinfo->si_xib_buf))
+		goto out_unset;
+
+	sbinfo->si_xib_last_pindex = 0;
+	sbinfo->si_xib_next_bit = 0;
+	if (vfsub_f_size_read(file) < PAGE_SIZE) {
+		pos = 0;
+		err = xino_fwrite(file, sbinfo->si_xib_buf, PAGE_SIZE, &pos);
+		if (unlikely(err != PAGE_SIZE))
+			goto out_free;
+	}
+	err = 0;
+	goto out; /* success */
+
+out_free:
+	if (sbinfo->si_xib_buf)
+		free_page((unsigned long)sbinfo->si_xib_buf);
+	sbinfo->si_xib_buf = NULL;
+	if (err >= 0)
+		err = -EIO;
+out_unset:
+	fput(sbinfo->si_xib);
+	sbinfo->si_xib = NULL;
+out:
+	AuTraceErr(err);
+	return err;
+}
+
+/* xino for each branch */
+static void xino_clear_br(struct super_block *sb)
+{
+	aufs_bindex_t bindex, bbot;
+	struct au_branch *br;
+
+	bbot = au_sbbot(sb);
+	for (bindex = 0; bindex <= bbot; bindex++) {
+		br = au_sbr(sb, bindex);
+		AuDebugOn(!br);
+		au_xino_put(br);
+	}
+}
+
+static void au_xino_set_br_shared(struct super_block *sb, struct au_branch *br,
+				  aufs_bindex_t bshared)
+{
+	struct au_branch *brshared;
+
+	brshared = au_sbr(sb, bshared);
+	AuDebugOn(!brshared->br_xino);
+	AuDebugOn(!brshared->br_xino->xi_file);
+	if (br->br_xino != brshared->br_xino) {
+		au_xino_get(brshared);
+		au_xino_put(br);
+		br->br_xino = brshared->br_xino;
+	}
+}
+
+struct au_xino_do_set_br {
+	struct au_branch *br;
+	ino_t h_ino;
+	aufs_bindex_t bshared;
+};
+
+static int au_xino_do_set_br(struct super_block *sb, const struct path *path,
+			     struct au_xino_do_set_br *args)
+{
+	int err;
+	struct au_xi_calc calc;
+	struct file *file;
+	struct au_branch *br;
+	struct au_xi_new xinew = {
+		.base = path
+	};
+
+	br = args->br;
+	xinew.xi = br->br_xino;
+	au_xi_calc(sb, args->h_ino, &calc);
+	xinew.copy_src = au_xino_file(xinew.xi, calc.idx);
+	if (args->bshared >= 0)
+		/* shared xino */
+		au_xino_set_br_shared(sb, br, args->bshared);
+	else if (!xinew.xi) {
+		/* new xino */
+		err = au_xino_init(br, calc.idx, xinew.copy_src);
+		if (unlikely(err))
+			goto out;
+	}
+
+	/* force re-creating */
+	xinew.xi = br->br_xino;
+	xinew.idx = calc.idx;
+	mutex_lock(&xinew.xi->xi_mtx);
+	file = au_xi_new(sb, &xinew);
+	mutex_unlock(&xinew.xi->xi_mtx);
+	err = PTR_ERR(file);
+	if (IS_ERR(file))
+		goto out;
+	AuDebugOn(!file);
+
+	err = au_xino_do_write(file, &calc, AUFS_ROOT_INO);
+	if (unlikely(err))
+		au_xino_put(br);
+
+out:
+	AuTraceErr(err);
+	return err;
+}
+
+static int au_xino_set_br(struct super_block *sb, const struct path *path)
+{
+	int err;
+	aufs_bindex_t bindex, bbot;
+	struct au_xino_do_set_br args;
+	struct inode *inode;
+
+	SiMustWriteLock(sb);
+
+	bbot = au_sbbot(sb);
+	inode = d_inode(sb->s_root);
+	for (bindex = 0; bindex <= bbot; bindex++) {
+		args.h_ino = au_h_iptr(inode, bindex)->i_ino;
+		args.br = au_sbr(sb, bindex);
+		args.bshared = is_sb_shared(sb, bindex, bindex - 1);
+		err = au_xino_do_set_br(sb, path, &args);
+		if (unlikely(err))
+			break;
+	}
+
+	AuTraceErr(err);
+	return err;
+}
+
+void au_xino_clr(struct super_block *sb)
+{
+	struct au_sbinfo *sbinfo;
+
+	xino_clear_xib(sb);
+	xino_clear_br(sb);
+	sbinfo = au_sbi(sb);
+	/* lvalue, do not call au_mntflags() */
+	au_opt_clr(sbinfo->si_mntflags, XINO);
+}
+
+int au_xino_set(struct super_block *sb, struct au_opt_xino *xiopt)
+{
+	int err;
+	struct dentry *dentry, *parent;
+	struct au_sbinfo *sbinfo;
+	const struct path *path;
+
+	SiMustWriteLock(sb);
+
+	err = 0;
+	sbinfo = au_sbi(sb);
+	path = &xiopt->file->f_path;
+	dentry = path->dentry;
+	parent = dget_parent(dentry);
+	au_opt_set(sbinfo->si_mntflags, XINO);
+	err = au_xino_set_xib(sb, path);
+	/* si_x{read,write} are set */
+	if (!err)
+		err = au_xino_set_br(sb, path);
+	if (!err)
+		goto out; /* success */
+
+	/* reset all */
+	AuIOErr("failed setting xino(%d).\n", err);
+	au_xino_clr(sb);
+
+out:
+	dput(parent);
+	return err;
+}
+
+/*
+ * create a xinofile at the default place/path.
+ */
+struct file *au_xino_def(struct super_block *sb)
+{
+	struct file *file;
+	char *page, *p;
+	struct au_branch *br;
+	struct super_block *h_sb;
+	struct path path;
+	aufs_bindex_t bbot, bindex, bwr;
+
+	br = NULL;
+	bbot = au_sbbot(sb);
+	bwr = -1;
+	for (bindex = 0; bindex <= bbot; bindex++) {
+		br = au_sbr(sb, bindex);
+		if (0 /* au_br_writable(br->br_perm) */ /* re-commit later */
+		    && !au_test_fs_bad_xino(au_br_sb(br))) {
+			bwr = bindex;
+			break;
+		}
+	}
+
+	if (bwr >= 0) {
+		file = ERR_PTR(-ENOMEM);
+		page = (void *)__get_free_page(GFP_NOFS);
+		if (unlikely(!page))
+			goto out;
+		path.mnt = au_br_mnt(br);
+		path.dentry = au_h_dptr(sb->s_root, bwr);
+		p = d_path(&path, page, PATH_MAX - sizeof(AUFS_XINO_FNAME));
+		file = (void *)p;
+		if (!IS_ERR(p)) {
+			strcat(p, "/" AUFS_XINO_FNAME);
+			AuDbg("%s\n", p);
+			file = au_xino_create(sb, p, /*silent*/0, /*wbrtop*/1);
+		}
+		free_page((unsigned long)page);
+	} else {
+		file = au_xino_create(sb, AUFS_XINO_DEFPATH, /*silent*/0,
+				      /*wbrtop*/0);
+		if (IS_ERR(file))
+			goto out;
+		h_sb = file->f_path.dentry->d_sb;
+		if (unlikely(au_test_fs_bad_xino(h_sb))) {
+			pr_err("xino doesn't support %s(%s)\n",
+			       AUFS_XINO_DEFPATH, au_sbtype(h_sb));
+			fput(file);
+			file = ERR_PTR(-EINVAL);
+		}
+	}
+
+out:
+	return file;
+}
+
+/* ---------------------------------------------------------------------- */
+
+/*
+ * initialize the xinofile for the specified branch @br
+ * at the place/path where @base_file indicates.
+ * test whether another branch is on the same filesystem or not,
+ * if found then share the xinofile with another branch.
+ */
+int au_xino_init_br(struct super_block *sb, struct au_branch *br, ino_t h_ino,
+		    const struct path *base)
+{
+	int err;
+	struct au_xino_do_set_br args = {
+		.h_ino	= h_ino,
+		.br	= br
+	};
+
+	args.bshared = sbr_find_shared(sb, /*btop*/0, au_sbbot(sb),
+				       au_br_sb(br));
+	err = au_xino_do_set_br(sb, base, &args);
+	if (unlikely(err))
+		au_xino_put(br);
+
+	return err;
 }
 
 /* ---------------------------------------------------------------------- */
