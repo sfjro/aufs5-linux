@@ -548,7 +548,17 @@ static int au_opt_br(struct super_block *sb, struct au_opt *opt,
 
 	err = 0;
 	switch (opt->type) {
+	case Opt_append:
+		opt->add.bindex = au_sbbot(sb) + 1;
+		if (opt->add.bindex < 0)
+			opt->add.bindex = 0;
+		goto add;
+		/* Always goto add, not fallthrough */
+	case Opt_prepend:
+		opt->add.bindex = 0;
+		fallthrough;
 	case Opt_add:
+	add: /* indented label */
 		err = au_br_add(sb, &opt->add,
 				au_ftest_opts(opts->flags, REMOUNT));
 		if (!err) {

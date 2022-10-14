@@ -189,6 +189,18 @@ static void au_fsctx_dump(struct au_opts *opts)
 				  u.add->bindex, u.add->pathname, u.add->perm,
 				  u.add->path.dentry);
 			break;
+		case Opt_append:
+			u.add = &opt->add;
+			AuDbg("append {b%d, %s, 0x%x, %p}\n",
+				  u.add->bindex, u.add->pathname, u.add->perm,
+				  u.add->path.dentry);
+			break;
+		case Opt_prepend:
+			u.add = &opt->add;
+			AuDbg("prepend {b%d, %s, 0x%x, %p}\n",
+				  u.add->bindex, u.add->pathname, u.add->perm,
+				  u.add->path.dentry);
+			break;
 
 		case Opt_rdcache:
 			AuDbg("rdcache %d\n", opt->rdcache);
@@ -291,6 +303,12 @@ static void au_fsctx_dump(struct au_opts *opts)
 
 const struct fs_parameter_spec aufs_fsctx_paramspec[] = {
 	fsparam_string("br", Opt_br),
+
+	/* "add=%d:%s" or "ins=%d:%s" */
+	fsparam_string("add", Opt_add),
+	fsparam_string("ins", Opt_add),
+	fsparam_path("append", Opt_append),
+	fsparam_path("prepend", Opt_prepend),
 
 	fsparam_path("xino", Opt_xino),
 	fsparam_flag("noxino", Opt_noxino),
@@ -557,6 +575,14 @@ static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *para
 	case Opt_add:
 		err = au_fsctx_parse_add(fc, param->string);
 		break;
+	case Opt_append:
+		err = au_fsctx_parse_do_add(fc, opt, param->string, param->size,
+					    /*dummy bindex*/1);
+		break;
+	case Opt_prepend:
+		err = au_fsctx_parse_do_add(fc, opt, param->string, param->size,
+					    /*bindex*/0);
+		break;
 
 	case Opt_xino:
 		err = au_fsctx_parse_xino(fc, &opt->xino, param);
@@ -738,6 +764,9 @@ static inline unsigned int is_colonopt(char *str)
 		return sizeof(name) - 1
 	do_test("br");
 	do_test("add");
+	do_test("ins");
+	do_test("append");
+	do_test("prepend");
 	/* add more later */
 #undef do_test
 
@@ -782,6 +811,10 @@ static void au_fsctx_opts_free(struct au_opts *opts)
 	while (opt->type != Opt_tail) {
 		switch (opt->type) {
 		case Opt_add:
+			fallthrough;
+		case Opt_append:
+			fallthrough;
+		case Opt_prepend:
 			kfree(opt->add.pathname);
 			path_put(&opt->add.path);
 			break;

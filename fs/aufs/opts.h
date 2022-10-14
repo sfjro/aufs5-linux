@@ -18,7 +18,7 @@
 
 enum {
 	Opt_br,
-	Opt_add,
+	Opt_add, Opt_append, Opt_prepend,
 	Opt_rdcache, Opt_rdblk, Opt_rdhash,
 	Opt_xino, Opt_noxino,
 	Opt_trunc_xino, Opt_trunc_xino_v,
