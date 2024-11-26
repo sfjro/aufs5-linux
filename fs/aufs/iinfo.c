@@ -61,6 +61,7 @@ void au_icntnr_init_once(void *_c)
 
 	au_rw_init(&iinfo->ii_rwsem);
 	inode_init_once(&c->vfs_inode);
+	spin_lock_init(&c->nlink_spin);
 }
 
 void au_hinode_init(struct au_hinode *hinode)

@@ -13,6 +13,7 @@
 #ifdef __KERNEL__
 
 #include <linux/fs.h>
+#include "fstype.h"
 #include "rwsem.h"
 
 struct au_hinode {
@@ -28,6 +29,7 @@ struct au_iinfo {
 struct au_icntnr {
 	struct au_iinfo		iinfo;
 	struct inode		vfs_inode;
+	spinlock_t		nlink_spin; /* protects vfs_inode.i_nlink */
 	struct rcu_head		rcu;
 } ____cacheline_aligned_in_smp;
 
@@ -37,6 +39,24 @@ static inline struct au_iinfo *au_ii(struct inode *inode)
 {
 	BUG_ON(is_bad_inode(inode));
 	return &(container_of(inode, struct au_icntnr, vfs_inode)->iinfo);
+}
+
+static inline void au_nlink_lock(struct inode *inode)
+{
+	spinlock_t *spin;
+
+	AuDebugOn(!au_test_aufs(inode->i_sb));
+	AuDebugOn(is_bad_inode(inode));
+	spin = &(container_of(inode, struct au_icntnr, vfs_inode)->nlink_spin);
+	spin_lock(spin);
+}
+
+static inline void au_nlink_unlock(struct inode *inode)
+{
+	spinlock_t *spin;
+
+	spin = &(container_of(inode, struct au_icntnr, vfs_inode)->nlink_spin);
+	spin_unlock(spin);
 }
 
 /* ---------------------------------------------------------------------- */

@@ -27,6 +27,7 @@
 #include "module.h"
 #include "rwsem.h"
 #include "super.h"
+#include "vfsub.h"
 /* add more later */
 
 #endif /* __KERNEL__ */
