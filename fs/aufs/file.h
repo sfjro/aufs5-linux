@@ -108,8 +108,8 @@ struct file *au_read_pre(struct file *file, int keep_fi, unsigned int lsc);
 void au_mf_add(struct file *h_file, struct file *file);
 void au_mf_del(struct file *h_file, struct file *file);
 #if IS_MODULE(CONFIG_AUFS_FS)
-const struct path *au_do_file_user_path(struct file *h_file);
-const struct inode *au_do_file_user_inode(struct file *h_file);
+const struct path *au_do_file_user_path(const struct file *h_file);
+const struct inode *au_do_file_user_inode(const struct file *h_file);
 #elif IS_BUILTIN(CONFIG_AUFS_FS)
 /* declared in include/linux/fs.h */
 #endif
