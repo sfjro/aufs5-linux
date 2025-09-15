@@ -21,11 +21,11 @@ static struct hlist_bl_head au_mmapped_finfo[N];
 
 static unsigned int au_mf_hash(const struct file *h_file)
 {
-	unsigned long long ull;
+	uintptr_t ptr;
 
-	BUILD_BUG_ON(sizeof(ull) != sizeof(h_file));
-	ull = (unsigned long long)h_file;
-	return (ull >> 8) & N;
+	BUILD_BUG_ON(sizeof(ptr) < sizeof(h_file));
+	ptr = (uintptr_t)h_file;
+	return (ptr >> 8) & N;
 }
 
 void au_mf_add(struct file *h_file, struct file *file)
