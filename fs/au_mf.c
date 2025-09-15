@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (C) 2025 Junjiro R. Okajima
+ */
 
 #include <linux/fs.h>
 #include <linux/module.h>
