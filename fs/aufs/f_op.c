@@ -640,7 +640,7 @@ static int aufs_mmap(struct file *file, struct vm_area_struct *vma)
 	 *			 au_flag_conv(vma->vm_flags));
 	 */
 	if (!err)
-		err = call_mmap(h_file, vma);
+		err = vfs_mmap(h_file, vma);
 	if (!err) {
 		au_mf_add(h_file, file);
 		fsstack_copy_attr_atime(inode, file_inode(h_file));

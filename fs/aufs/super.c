@@ -721,18 +721,18 @@ void au_remount_refresh(struct super_block *sb, unsigned int do_idop)
 
 	if (do_idop) {
 		if (au_ftest_si(sbi, NO_DREVAL)) {
-			AuDebugOn(sb->s_d_op == &aufs_dop_noreval);
-			sb->s_d_op = &aufs_dop_noreval;
+			AuDebugOn(sb->__s_d_op == &aufs_dop_noreval);
+			set_default_d_op(sb, &aufs_dop_noreval);
 			AuDebugOn(sbi->si_iop_array == aufs_iop_nogetattr);
 			sbi->si_iop_array = aufs_iop_nogetattr;
 		} else {
-			AuDebugOn(sb->s_d_op == &aufs_dop);
-			sb->s_d_op = &aufs_dop;
+			AuDebugOn(sb->__s_d_op == &aufs_dop);
+			set_default_d_op(sb, &aufs_dop);
 			AuDebugOn(sbi->si_iop_array == aufs_iop);
 			sbi->si_iop_array = aufs_iop;
 		}
 		pr_info("reset to %ps and %ps\n",
-			sb->s_d_op, sbi->si_iop_array);
+			sb->__s_d_op, sbi->si_iop_array);
 	}
 
 	di_write_unlock(root);

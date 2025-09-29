@@ -718,7 +718,7 @@ out:
 void au_refresh_dop(struct dentry *dentry, int force_reval)
 {
 	const struct dentry_operations *dop
-		= force_reval ? &aufs_dop : dentry->d_sb->s_d_op;
+		= force_reval ? &aufs_dop : dentry->d_sb->__s_d_op;
 	static const unsigned int mask
 		= DCACHE_OP_REVALIDATE | DCACHE_OP_WEAK_REVALIDATE;
 

@@ -109,7 +109,7 @@ static int au_fsctx_fill_super(struct super_block *sb, struct fs_context *fc)
 	/* all timestamps always follow the ones on the branch */
 	sb->s_flags |= SB_NOATIME | SB_NODIRATIME | SB_I_VERSION;
 	sb->s_op = &aufs_sop;
-	sb->s_d_op = &aufs_dop;
+	set_default_d_op(sb, &aufs_dop);
 	sb->s_magic = AUFS_SUPER_MAGIC;
 	sb->s_maxbytes = 0;
 	sb->s_stack_depth = 1;
@@ -132,9 +132,9 @@ static int au_fsctx_fill_super(struct super_block *sb, struct fs_context *fc)
 	err = au_opts_mount(sb, &a->opts);
 	AuTraceErr(err);
 	if (!err && au_ftest_si(sbinfo, NO_DREVAL)) {
-		sb->s_d_op = &aufs_dop_noreval;
-		/* infofc(fc, "%ps", sb->s_d_op); */
-		pr_info("%ps\n", sb->s_d_op);
+		set_default_d_op(sb, &aufs_dop_noreval);
+		/* infofc(fc, "%ps", sb->__s_d_op); */
+		pr_info("%ps\n", sb->__s_d_op);
 		au_refresh_dop(root, /*force_reval*/0);
 		sbinfo->si_iop_array = aufs_iop_nogetattr;
 		au_refresh_iop(inode, /*force_getattr*/0);
