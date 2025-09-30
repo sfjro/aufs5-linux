@@ -19,7 +19,7 @@
 #define N 0x0ff
 static struct hlist_bl_head au_mmapped_finfo[N];
 
-static unsigned int au_mf_hash(struct file *h_file)
+static unsigned int au_mf_hash(const struct file *h_file)
 {
 	uintptr_t ptr;
 
@@ -55,7 +55,7 @@ void au_mf_del(struct file *h_file, struct file *file)
 	au_hbl_del(&finfo->fi_mf, hbl_head);
 }
 
-static struct file *au_mf_find(struct file *h_file)
+static struct file *au_mf_find(const struct file *h_file)
 {
 	struct file *found;
 	unsigned int hash;
@@ -87,7 +87,7 @@ static struct file *au_mf_find(struct file *h_file)
 /* ---------------------------------------------------------------------- */
 /* declared in include/linux/fs.h */
 
-const struct path *au_do_file_user_path(struct file *h_file)
+const struct path *au_do_file_user_path(const struct file *h_file)
 {
 	struct path *path;
 	struct file *file;
@@ -101,7 +101,7 @@ const struct path *au_do_file_user_path(struct file *h_file)
 }
 EXPORT_SYMBOL_GPL(au_do_file_user_path);
 
-const struct inode *au_do_file_user_inode(struct file *h_file)
+const struct inode *au_do_file_user_inode(const struct file *h_file)
 {
 	struct inode *inode;
 	struct file *file;
