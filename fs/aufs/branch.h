@@ -219,12 +219,12 @@ static const loff_t au_loff_max = LLONG_MAX;
 aufs_bindex_t au_xi_root(struct super_block *sb, struct dentry *dentry);
 struct file *au_xino_create(struct super_block *sb, char *fpath, int silent,
 			    int wbrtop);
-struct file *au_xino_create2(struct super_block *sb, struct path *base,
+struct file *au_xino_create2(struct super_block *sb, const struct path *base,
 			     struct file *copy_src);
 struct au_xi_new {
 	struct au_xino *xi;	/* switch between xino and xigen */
 	int idx;
-	struct path *base;
+	const struct path *base;
 	struct file *copy_src;
 };
 struct file *au_xi_new(struct super_block *sb, struct au_xi_new *xinew);
@@ -248,7 +248,7 @@ void au_xino_clr(struct super_block *sb);
 int au_xino_set(struct super_block *sb, struct au_opt_xino *xiopt, int remount);
 struct file *au_xino_def(struct super_block *sb);
 int au_xino_init_br(struct super_block *sb, struct au_branch *br, ino_t hino,
-		    struct path *base);
+		    const struct path *base);
 
 ino_t au_xino_new_ino(struct super_block *sb);
 void au_xino_delete_inode(struct inode *inode, const int unlinked);

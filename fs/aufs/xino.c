@@ -113,7 +113,7 @@ out:
 	return parent;
 }
 
-static void au_xino_lock_dir(struct super_block *sb, struct path *xipath,
+static void au_xino_lock_dir(struct super_block *sb, const struct path *xipath,
 			     struct au_xino_lock_dir *ldir)
 {
 	aufs_bindex_t bindex;
@@ -218,7 +218,7 @@ out:
 /*
  * create a new xinofile at the same place/path as @base.
  */
-struct file *au_xino_create2(struct super_block *sb, struct path *base,
+struct file *au_xino_create2(struct super_block *sb, const struct path *base,
 			     struct file *copy_src)
 {
 	struct file *file;
@@ -1360,7 +1360,7 @@ static void xino_clear_xib(struct super_block *sb)
 	sbinfo->si_xib_buf = NULL;
 }
 
-static int au_xino_set_xib(struct super_block *sb, struct path *path)
+static int au_xino_set_xib(struct super_block *sb, const struct path *path)
 {
 	int err;
 	loff_t pos;
@@ -1454,7 +1454,7 @@ struct au_xino_do_set_br {
 	aufs_bindex_t bshared;
 };
 
-static int au_xino_do_set_br(struct super_block *sb, struct path *path,
+static int au_xino_do_set_br(struct super_block *sb, const struct path *path,
 			     struct au_xino_do_set_br *args)
 {
 	int err;
@@ -1499,7 +1499,7 @@ out:
 	return err;
 }
 
-static int au_xino_set_br(struct super_block *sb, struct path *path)
+static int au_xino_set_br(struct super_block *sb, const struct path *path)
 {
 	int err;
 	aufs_bindex_t bindex, bbot;
@@ -1543,7 +1543,7 @@ int au_xino_set(struct super_block *sb, struct au_opt_xino *xiopt, int remount)
 	struct qstr *dname, *cur_name;
 	struct file *cur_xino;
 	struct au_sbinfo *sbinfo;
-	struct path *path, *cur_path;
+	const struct path *path, *cur_path;
 
 	SiMustWriteLock(sb);
 
@@ -1656,7 +1656,7 @@ out:
  * if found then share the xinofile with another branch.
  */
 int au_xino_init_br(struct super_block *sb, struct au_branch *br, ino_t h_ino,
-		    struct path *base)
+		    const struct path *base)
 {
 	int err;
 	struct au_xino_do_set_br args = {

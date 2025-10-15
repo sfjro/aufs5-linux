@@ -113,7 +113,7 @@ int vfsub_sync_filesystem(struct super_block *h_sb);
 
 /* ---------------------------------------------------------------------- */
 
-int vfsub_update_h_iattr(struct path *h_path, int *did);
+int vfsub_update_h_iattr(const struct path *h_path, int *did);
 struct file *vfsub_dentry_open(struct path *path, int flags);
 struct file *vfsub_filp_open(const char *path, int oflags, int mode);
 struct au_branch;
@@ -293,7 +293,7 @@ ssize_t vfsub_splice_read(struct file *in, loff_t *ppos,
 ssize_t vfsub_splice_from(struct pipe_inode_info *pipe, struct file *out,
 			  loff_t *ppos, size_t len, unsigned int flags);
 
-static inline long vfsub_truncate(struct path *path, loff_t length)
+static inline long vfsub_truncate(const struct path *path, loff_t length)
 {
 	long err;
 
@@ -303,9 +303,9 @@ static inline long vfsub_truncate(struct path *path, loff_t length)
 	return err;
 }
 
-int vfsub_trunc(struct path *h_path, loff_t length, unsigned int attr,
+int vfsub_trunc(const struct path *h_path, loff_t length, unsigned int attr,
 		struct file *h_file);
-int vfsub_fsync(struct file *file, struct path *path, int datasync);
+int vfsub_fsync(struct file *file, const struct path *path, int datasync);
 
 /*
  * re-use branch fs's ioctl(FICLONE) while aufs itself doesn't support such
@@ -355,9 +355,9 @@ struct dentry *vfsub_sio_mkdir(struct inode *dir, struct path *path, int mode);
 int vfsub_sio_rmdir(struct inode *dir, struct path *path);
 int vfsub_sio_notify_change(struct path *path, struct iattr *ia,
 			    struct inode **delegated_inode);
-int vfsub_notify_change(struct path *path, struct iattr *ia,
+int vfsub_notify_change(const struct path *path, struct iattr *ia,
 			struct inode **delegated_inode);
-int vfsub_unlink(struct inode *dir, struct path *path,
+int vfsub_unlink(struct inode *dir, const struct path *path,
 		 struct inode **delegated_inode, int force);
 
 static inline int vfsub_getattr(const struct path *path, struct kstat *st)
