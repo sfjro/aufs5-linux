@@ -17,11 +17,11 @@
 /* whout.c */
 int au_wh_name_alloc(struct qstr *wh, const struct qstr *name);
 int au_wh_test(struct mnt_idmap *h_idmap, struct path *h_ppath,
-	       struct qstr *wh_name, int try_sio);
+	       const struct qstr *wh_name, int try_sio);
 int au_diropq_test(struct mnt_idmap *h_idmap, struct path *h_path);
 struct au_branch;
 struct dentry *au_whtmp_lkup(struct dentry *h_parent, struct au_branch *br,
-			     struct qstr *prefix);
+			     const struct qstr *prefix);
 int au_whtmp_ren(struct dentry *h_dentry, struct au_branch *br);
 int au_wh_unlink_dentry(struct inode *h_dir, struct path *h_path,
 			struct dentry *dentry);
@@ -37,7 +37,7 @@ int au_wh_init(struct au_branch *br, struct super_block *sb);
 
 struct dentry *au_diropq_sio(struct dentry *dentry, aufs_bindex_t bindex,
 			     unsigned int flags);
-struct dentry *au_wh_lkup(struct dentry *h_parent, struct qstr *base_name,
+struct dentry *au_wh_lkup(struct dentry *h_parent, const struct qstr *base_name,
 			  struct au_branch *br);
 struct dentry *au_wh_create(struct dentry *dentry, aufs_bindex_t bindex,
 			    struct dentry *h_parent);

@@ -15,7 +15,7 @@
 #include <linux/file.h>
 #include "aufs.h"
 
-static int au_wbr_fd(struct path *path, struct aufs_wbr_fd __user *arg)
+static int au_wbr_fd(const struct path *path, struct aufs_wbr_fd __user *arg)
 {
 	int err, fd;
 	aufs_bindex_t wbi, bindex, bbot;
