@@ -224,7 +224,7 @@ struct file *au_xino_create2(struct super_block *sb, const struct path *base,
 	struct file *file;
 	struct dentry *dentry;
 	struct inode *dir, *delegated;
-	struct qstr *name;
+	const struct qstr *name;
 	struct path ppath, path;
 	int err, do_unlock;
 	struct au_xino_lock_dir ldir;
@@ -1540,7 +1540,7 @@ int au_xino_set(struct super_block *sb, struct au_opt_xino *xiopt, int remount)
 {
 	int err, skip;
 	struct dentry *dentry, *parent, *cur_dentry, *cur_parent;
-	struct qstr *dname, *cur_name;
+	const struct qstr *dname, *cur_name;
 	struct file *cur_xino;
 	struct au_sbinfo *sbinfo;
 	const struct path *path, *cur_path;
