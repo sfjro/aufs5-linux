@@ -52,7 +52,7 @@ int au_wh_name_alloc(struct qstr *wh, const struct qstr *name)
  * @try_sio specifies the necessary of super-io.
  */
 int au_wh_test(struct mnt_idmap *h_idmap, struct path *h_ppath,
-	       struct qstr *wh_name, int try_sio)
+	       const struct qstr *wh_name, int try_sio)
 {
 	int err;
 	struct dentry *wh_dentry;
@@ -104,7 +104,7 @@ int au_diropq_test(struct mnt_idmap *h_idmap, struct path *h_path)
  * returns a negative dentry whose name is unique and temporary.
  */
 struct dentry *au_whtmp_lkup(struct dentry *h_parent, struct au_branch *br,
-			     struct qstr *prefix)
+			     const struct qstr *prefix)
 {
 	struct dentry *dentry;
 	int i;
@@ -797,7 +797,7 @@ struct dentry *au_diropq_sio(struct dentry *dentry, aufs_bindex_t bindex,
  * @base_name: name of dentry which will be whiteouted
  * returns dentry for whiteout.
  */
-struct dentry *au_wh_lkup(struct dentry *h_parent, struct qstr *base_name,
+struct dentry *au_wh_lkup(struct dentry *h_parent, const struct qstr *base_name,
 			  struct au_branch *br)
 {
 	int err;

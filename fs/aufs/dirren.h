@@ -77,7 +77,7 @@ int au_dr_br_init(struct super_block *sb, struct au_branch *br,
 		  const struct path *path);
 int au_dr_br_fin(struct super_block *sb, struct au_branch *br);
 int au_dr_rename(struct dentry *src, aufs_bindex_t bindex,
-		 struct qstr *dst_name, void *_rev);
+		 const struct qstr *dst_name, void *_rev);
 void au_dr_rename_fin(struct dentry *src, aufs_bindex_t btgt, void *rev);
 void au_dr_rename_rev(struct dentry *src, aufs_bindex_t bindex, void *rev);
 int au_dr_lkup(struct au_do_lookup_args *lkup, struct dentry *dentry,
@@ -97,7 +97,7 @@ AuStubInt0(au_dr_br_init, struct super_block *sb, struct au_branch *br,
 	   const struct path *path);
 AuStubInt0(au_dr_br_fin, struct super_block *sb, struct au_branch *br);
 AuStubInt0(au_dr_rename, struct dentry *src, aufs_bindex_t bindex,
-	   struct qstr *dst_name, void *_rev);
+	   const struct qstr *dst_name, void *_rev);
 AuStubVoid(au_dr_rename_fin, struct dentry *src, aufs_bindex_t btgt, void *rev);
 AuStubVoid(au_dr_rename_rev, struct dentry *src, aufs_bindex_t bindex,
 	   void *rev);

@@ -340,7 +340,7 @@ int au_test_nfsd(void);
 void au_export_init(struct super_block *sb);
 void au_xigen_inc(struct inode *inode);
 int au_xigen_new(struct inode *inode);
-int au_xigen_set(struct super_block *sb, struct path *path);
+int au_xigen_set(struct super_block *sb, const struct path *path);
 void au_xigen_clr(struct super_block *sb);
 
 static inline int au_busy_or_stale(void)
@@ -354,7 +354,7 @@ AuStubInt0(au_test_nfsd, void)
 AuStubVoid(au_export_init, struct super_block *sb)
 AuStubVoid(au_xigen_inc, struct inode *inode)
 AuStubInt0(au_xigen_new, struct inode *inode)
-AuStubInt0(au_xigen_set, struct super_block *sb, struct path *path)
+AuStubInt0(au_xigen_set, struct super_block *sb, const struct path *path)
 AuStubVoid(au_xigen_clr, struct super_block *sb)
 AuStub(int, au_busy_or_stale, return -EBUSY, void)
 #endif /* CONFIG_AUFS_EXPORT */

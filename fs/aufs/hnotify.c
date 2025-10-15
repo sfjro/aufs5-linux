@@ -181,7 +181,7 @@ static int hn_gen_by_inode(char *name, unsigned int nlen, struct inode *inode,
 {
 	int err;
 	struct dentry *d;
-	struct qstr *dname;
+	const struct qstr *dname;
 
 	err = 1;
 	if (unlikely(inode->i_ino == AUFS_ROOT_INO)) {
@@ -349,7 +349,7 @@ static struct dentry *lookup_wlock_by_name(char *name, unsigned int nlen,
 					   struct inode *dir)
 {
 	struct dentry *dentry, *d, *parent;
-	struct qstr *dname;
+	const struct qstr *dname;
 
 	parent = d_find_any_alias(dir);
 	if (!parent)

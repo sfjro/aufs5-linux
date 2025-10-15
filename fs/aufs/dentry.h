@@ -52,7 +52,8 @@ struct au_dinfo {
 struct au_do_lookup_args {
 	unsigned int		flags;
 	mode_t			type;
-	struct qstr		whname, *name;
+	struct qstr		whname;
+	const struct qstr	*name;
 	struct au_dr_lookup	dirren;
 };
 
@@ -61,7 +62,7 @@ struct au_do_lookup_args {
 /* dentry.c */
 extern const struct dentry_operations aufs_dop, aufs_dop_noreval;
 struct au_branch;
-struct dentry *au_sio_lkup_one(struct mnt_idmap *idmap, struct qstr *name,
+struct dentry *au_sio_lkup_one(struct mnt_idmap *idmap, const struct qstr *name,
 			       struct path *ppath);
 int au_h_verify(struct dentry *h_dentry, unsigned int udba, struct inode *h_dir,
 		struct dentry *h_parent, struct au_branch *br);

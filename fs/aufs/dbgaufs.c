@@ -219,7 +219,7 @@ static int dbgaufs_xino_open(struct inode *inode, struct file *file)
 	struct super_block *sb;
 	struct au_xino *xi;
 	struct file *xf;
-	struct qstr *name;
+	const struct qstr *name;
 	struct au_branch *br;
 
 	err = -ENOENT;

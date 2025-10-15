@@ -167,7 +167,7 @@ out:
 	return err;
 }
 
-int au_xigen_set(struct super_block *sb, struct path *path)
+int au_xigen_set(struct super_block *sb, const struct path *path)
 {
 	int err;
 	struct au_sbinfo *sbinfo;
@@ -262,7 +262,8 @@ out:
 static struct vfsmount *au_mnt_get(struct super_block *sb)
 {
 	struct vfsmount *mnt;
-	struct path root, *paths, *p;
+	struct path root;
+	const struct path *paths, *p;
 	struct path a[8];
 
 	get_fs_root(current->fs, &root);
