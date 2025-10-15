@@ -90,7 +90,7 @@ static inline int au_kmidx_sub(size_t sz, size_t new_sz)
 #endif
 }
 
-int au_seq_path(struct seq_file *seq, struct path *path);
+int au_seq_path(struct seq_file *seq, const struct path *path);
 
 #ifdef CONFIG_PROC_FS
 /* procfs.c */

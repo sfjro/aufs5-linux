@@ -148,7 +148,7 @@ module_param_named(allow_userns, au_userns, bool, 0444);
 
 static char au_esc_chars[0x20 + 3]; /* 0x01-0x20, backslash, del, and NULL */
 
-int au_seq_path(struct seq_file *seq, struct path *path)
+int au_seq_path(struct seq_file *seq, const struct path *path)
 {
 	int err;
 

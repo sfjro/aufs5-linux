@@ -754,7 +754,7 @@ const struct super_operations aufs_sop = {
 	.destroy_inode	= aufs_destroy_inode,
 	.free_inode	= aufs_free_inode,
 	/* always deleting, no clearing */
-	.drop_inode	= generic_delete_inode,
+	.drop_inode	= inode_just_drop,
 	.show_options	= aufs_show_options,
 	.statfs		= aufs_statfs,
 	.put_super	= aufs_put_super,

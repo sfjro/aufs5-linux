@@ -235,7 +235,7 @@ out:
 	return err;
 }
 
-struct dentry *au_sio_lkup_one(struct mnt_idmap *idmap, struct qstr *name,
+struct dentry *au_sio_lkup_one(struct mnt_idmap *idmap, const struct qstr *name,
 			       struct path *ppath)
 {
 	struct dentry *dentry;
@@ -861,7 +861,7 @@ static int h_d_revalidate(struct au_d_reval_args *args, struct inode *inode,
 	unsigned char plus, unhashed, is_root, h_plus, h_nfs, tmpfile;
 	struct inode *h_inode, *h_cached_inode;
 	struct dentry *h_parent, *dentry = args->dentry;
-	struct qstr *h_name, *qname = (struct qstr *)args->qname;
+	const struct qstr *h_name, *qname = args->qname;
 	struct name_snapshot h_nameshot;
 	struct au_d_reval_args h_args = {
 		.qname	= &h_nameshot.name,

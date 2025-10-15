@@ -102,7 +102,7 @@ static inline int au_alive_dir(struct dentry *d)
 	return err;
 }
 
-static inline int au_qstreq(struct qstr *a, struct qstr *b)
+static inline int au_qstreq(const struct qstr *a, const struct qstr *b)
 {
 	return a->len == b->len
 		&& !memcmp(a->name, b->name, a->len);
