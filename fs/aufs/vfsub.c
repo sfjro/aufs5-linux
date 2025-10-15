@@ -461,10 +461,9 @@ int vfsub_rename(struct inode *src_dir, struct dentry *src_dentry,
 	if (unlikely(err))
 		goto out;
 
-	rd.old_mnt_idmap = mnt_idmap(path->mnt);
+	rd.mnt_idmap = mnt_idmap(path->mnt);
 	rd.old_dentry = src_dentry;
 	rd.old_parent = rd.old_dentry->d_parent;
-	rd.new_mnt_idmap = rd.old_mnt_idmap;
 	rd.new_dentry = path->dentry;
 	rd.new_parent = rd.new_dentry->d_parent;
 	rd.delegated_inode = delegated_inode;
