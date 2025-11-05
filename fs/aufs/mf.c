@@ -15,9 +15,12 @@
  * Used by customized file_user_path() and file_user_inode() in
  * include/linux/fs.h.
  * This table doesn't make get/put call for the elements.
+ *
+ * INIT_HLIST_BL_HEAD() sets NULL to its member, so we can skip it since this is
+ * 'static'.
  */
 #define N 0x0ff
-static struct hlist_bl_head au_mmapped_finfo[N];
+static struct hlist_bl_head au_mmapped_finfo[N + 1];
 
 static unsigned int au_mf_hash(const struct file *h_file)
 {
