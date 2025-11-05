@@ -219,7 +219,8 @@ static struct file *au_write_pre(struct file *file, int do_ready,
 	if (do_ready)
 		au_unpin(&pin);
 	di_read_unlock(dentry, /*flags*/0);
-	vfsub_file_start_write(h_file);
+	if (do_ready)
+		vfsub_file_start_write(h_file);
 
 out_fi:
 	fi_write_unlock(file);
@@ -623,7 +624,7 @@ static int aufs_mmap(struct file *file, struct vm_area_struct *vma)
 	lockdep_off();
 	si_read_lock(sb, AuLock_NOPLMW);
 
-	h_file = au_write_pre(file, wlock, /*wpre*/NULL);
+	h_file = au_write_pre(file, /*do_ready*/wlock, /*wpre*/NULL);
 	lockdep_on();
 	err = PTR_ERR(h_file);
 	if (IS_ERR(h_file))
