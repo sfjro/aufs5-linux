@@ -92,7 +92,7 @@ static struct file *au_mf_find(const struct file *h_file)
 
 const struct path *au_do_file_user_path(const struct file *h_file)
 {
-	struct path *path;
+	const struct path *path;
 	struct file *file;
 
 	path = NULL;

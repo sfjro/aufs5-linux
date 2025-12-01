@@ -461,7 +461,7 @@ static int au_drinfo_construct(struct au_drinfo_fdata **fdata,
 	struct au_drinfo_fdata *f, *p;
 	struct au_drinfo *drinfo;
 	struct inode *h_inode;
-	struct qstr *qname;
+	const struct qstr *qname;
 
 	err = 0;
 	f = *fdata;
@@ -601,7 +601,7 @@ static int au_drinfo_do_store(struct au_drinfo_store *w,
 	};
 	struct inode *h_dir, *h_inode, *delegated;
 	struct file *infofile;
-	struct qstr *qname;
+	const struct qstr *qname;
 
 	AuDebugOn(elm
 		  && memcmp(elm, page_address(ZERO_PAGE(0)), sizeof(*elm)));
@@ -790,7 +790,7 @@ static void au_drinfo_store_rev(struct au_drinfo_rev *rev,
 
 /* caller has to call au_dr_rename_fin() later */
 static int au_drinfo_store(struct dentry *dentry, aufs_bindex_t btgt,
-			   struct qstr *dst_name, void *_rev)
+			   const struct qstr *dst_name, void *_rev)
 {
 	int err, sz, nelm;
 	aufs_bindex_t bindex, btail;
@@ -870,7 +870,7 @@ out:
 /* ---------------------------------------------------------------------- */
 
 int au_dr_rename(struct dentry *src, aufs_bindex_t bindex,
-		 struct qstr *dst_name, void *_rev)
+		 const struct qstr *dst_name, void *_rev)
 {
 	int err, already;
 	ino_t ino;
@@ -1044,7 +1044,7 @@ static void au_call_drinfo_do_load(void *args)
 
 struct au_drinfo_load {
 	struct path h_ppath;
-	struct qstr *qname;
+	const struct qstr *qname;
 	unsigned char no_sio;
 
 	aufs_bindex_t ninfo;
