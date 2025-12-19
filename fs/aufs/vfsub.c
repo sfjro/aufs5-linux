@@ -304,6 +304,7 @@ int vfsub_create(struct inode *dir, struct path *path, int mode, bool want_excl)
 		struct path tmp = *path;
 		int did;
 
+		security_path_post_mknod(idmap, d);
 		vfsub_update_h_iattr(&tmp, &did);
 		if (did) {
 			tmp.dentry = path->dentry->d_parent;
