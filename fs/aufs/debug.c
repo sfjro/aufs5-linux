@@ -125,8 +125,8 @@ static int do_pri_inode(aufs_bindex_t bindex, struct inode *inode, int hn,
 	     inode->i_acl, inode->i_default_acl,
 	     hn, (long long)timespec64_to_ns(&ctime) & 0x0ffff,
 	     inode->i_mapping ? inode->i_mapping->nrpages : 0,
-	     inode->i_state, inode->i_flags, inode_peek_iversion(inode),
-	     inode->i_generation,
+	     inode_state_read_once(inode), inode->i_flags,
+	     inode_peek_iversion(inode), inode->i_generation,
 	     l ? ", wh " : "", l, n);
 	return 0;
 }

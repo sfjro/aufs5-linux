@@ -307,7 +307,7 @@ static int hn_job(struct hn_job_args *a)
 	    && a->h_inode) {
 		inode_lock_shared_nested(a->h_inode, AuLsc_I_CHILD);
 		if (!vfsub_inode_nlink(a->h_inode, AU_I_BRANCH)
-		    && !(a->h_inode->i_state & I_LINKABLE))
+		    && !(inode_state_read_once(a->h_inode) & I_LINKABLE))
 			hn_xino(a->inode, a->h_inode); /* ignore this error */
 		inode_unlock_shared(a->h_inode);
 	}

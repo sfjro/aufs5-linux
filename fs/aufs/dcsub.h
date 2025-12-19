@@ -69,7 +69,7 @@ static inline int au_d_linkable(struct dentry *d)
 	err = au_d_hashed_positive(d);
 	if (err
 	    && d_is_positive(d)
-	    && (inode->i_state & I_LINKABLE))
+	    && (inode_state_read_once(inode) & I_LINKABLE))
 		err = 0;
 	return err;
 }
