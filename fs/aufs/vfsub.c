@@ -747,9 +747,9 @@ int vfsub_trunc(const struct path *h_path, loff_t length, unsigned int attr,
 	h_inode = d_inode(h_path->dentry);
 	h_sb = h_inode->i_sb;
 	lockdep_off();
-	sb_start_write(h_sb);
-	err = do_truncate(h_idmap, h_path->dentry, length, attr, h_file);
-	sb_end_write(h_sb);
+	scoped_guard(super_write, h_sb)
+		err = do_truncate(h_idmap, h_path->dentry, length, attr,
+				  h_file);
 	lockdep_on();
 
 out:
