@@ -812,6 +812,10 @@ static int au_cpup_single(struct au_cp_generic *cpg, struct dentry *dst_parent)
 	else
 		dget(dst_parent);
 
+	err = vfsub_mnt_want_write(a->h_path.mnt);
+	if (unlikely(err))
+		goto out_parent;
+
 	plink = !!au_opt_test(au_mntflags(sb), PLINK);
 	dst_inode = au_h_iptr(inode, cpg->bdst);
 	if (dst_inode) {
@@ -820,7 +824,7 @@ static int au_cpup_single(struct au_cp_generic *cpg, struct dentry *dst_parent)
 			AuIOErr("hi%lu(i%lu) exists on b%d "
 				"but plink is disabled\n",
 				dst_inode->i_ino, inode->i_ino, cpg->bdst);
-			goto out_parent;
+			goto out_mnt_write;
 		}
 
 		if (vfsub_inode_nlink(dst_inode, AU_I_BRANCH)) {
@@ -829,14 +833,14 @@ static int au_cpup_single(struct au_cp_generic *cpg, struct dentry *dst_parent)
 			h_src = au_plink_lkup(inode, cpg->bdst);
 			err = PTR_ERR(h_src);
 			if (IS_ERR(h_src))
-				goto out_parent;
+				goto out_mnt_write;
 			if (unlikely(d_is_negative(h_src))) {
 				err = -EIO;
 				AuIOErr("i%lu exists on b%d "
 					"but not pseudo-linked\n",
 					inode->i_ino, cpg->bdst);
 				dput(h_src);
-				goto out_parent;
+				goto out_mnt_write;
 			}
 
 			if (do_dt) {
@@ -857,7 +861,7 @@ static int au_cpup_single(struct au_cp_generic *cpg, struct dentry *dst_parent)
 				iput(delegated);
 			}
 			dput(h_src);
-			goto out_parent;
+			goto out_mnt_write;
 		} else
 			/* todo: cpup_wh_file? */
 			/* udba work */
@@ -918,7 +922,7 @@ static int au_cpup_single(struct au_cp_generic *cpg, struct dentry *dst_parent)
 		err = au_do_ren_after_cpup(cpg, &a->h_path);
 	}
 	if (!err)
-		goto out_parent; /* success */
+		goto out_mnt_write; /* success */
 
 	/* revert */
 out_rev:
@@ -939,6 +943,8 @@ out_rev:
 		AuIOErr("failed removing broken entry(%d, %d)\n", err, rerr);
 		err = -EIO;
 	}
+out_mnt_write:
+	vfsub_mnt_drop_write(a->h_path.mnt);
 out_parent:
 	dput(dst_parent);
 	au_kfree_rcu(a);
@@ -1217,6 +1223,10 @@ static int au_cpup_wh(struct au_cp_generic *cpg, struct file *file)
 	if (unlikely(err))
 		goto out_wh;
 
+	err = vfsub_mnt_want_write(h_path.mnt);
+	if (unlikely(err))
+		goto out_wh;
+
 	dget(wh_dentry);
 	h_path.dentry = wh_dentry;
 	if (!d_is_dir(wh_dentry)) {
@@ -1231,6 +1241,7 @@ static int au_cpup_wh(struct au_cp_generic *cpg, struct file *file)
 		err = -EIO;
 	}
 	au_dtime_revert(&dt);
+	vfsub_mnt_drop_write(h_path.mnt);
 	au_set_hi_wh(d_inode(dentry), bdst, wh_dentry);
 
 out_wh:

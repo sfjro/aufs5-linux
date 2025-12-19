@@ -439,7 +439,7 @@ out:
  */
 int au_wh_init(struct au_branch *br, struct super_block *sb)
 {
-	int err, i;
+	int err, i, need_drop;
 	const unsigned char do_plink
 		= !!au_opt_test(au_mntflags(sb), PLINK);
 	struct inode *h_dir;
@@ -493,7 +493,12 @@ int au_wh_init(struct au_branch *br, struct super_block *sb)
 			wbr->wbr_wh[i] = NULL;
 		}
 
-	err = 0;
+	need_drop = 0;
+	err = vfsub_mnt_want_write(path.mnt);
+	if (unlikely(err))
+		goto out_err;
+	need_drop = 1;
+
 	if (!au_br_writable(br->br_perm)) {
 		h_dir = d_inode(h_root);
 		au_wh_init_ro(h_dir, base, &path);
@@ -516,6 +521,8 @@ out_err:
 	pr_err("an error(%d) on the writable branch %pd(%s)\n",
 	       err, h_root, au_sbtype(h_root->d_sb));
 out:
+	if (need_drop)
+		vfsub_mnt_drop_write(path.mnt);
 	for (i = 0; i < AuBrWh_Last; i++)
 		dput(base[i].dentry);
 	return err;
@@ -567,13 +574,17 @@ static void reinit_br_wh(void *arg)
 	if (!err) {
 		h_path.dentry = wbr->wbr_whbase;
 		h_path.mnt = au_br_mnt(a->br);
-		delegated = NULL;
-		err = vfsub_unlink(hdir->hi_inode, &h_path, &delegated,
-				   /*force*/0);
-		if (unlikely(err == -EWOULDBLOCK)) {
-			pr_warn("cannot retry for NFSv4 delegation"
-				" for an internal unlink\n");
-			iput(delegated);
+		err = vfsub_mnt_want_write(h_path.mnt);
+		if (!err) {
+			delegated = NULL;
+			err = vfsub_unlink(hdir->hi_inode, &h_path, &delegated,
+					   /*force*/0);
+			vfsub_mnt_drop_write(h_path.mnt);
+			if (unlikely(err == -EWOULDBLOCK)) {
+				pr_warn("cannot retry for NFSv4 delegation"
+					" for an internal unlink\n");
+				iput(delegated);
+			}
 		}
 	} else {
 		pr_warn("%pd is moved, ignored\n", wbr->wbr_whbase);

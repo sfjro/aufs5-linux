@@ -262,6 +262,10 @@ static int au_dr_hino(struct super_block *sb, aufs_bindex_t bindex,
 		if (d_is_negative(hinopath.dentry))
 			goto out_dput; /* success */
 	} else {
+		err = vfsub_mnt_want_write(hinopath.mnt);
+		AuTraceErr(err);
+		if (unlikely(err))
+			goto out_dput;
 		if (au_dr_hino_test_empty(&br->br_dirren)) {
 			if (d_is_positive(hinopath.dentry)) {
 				delegated = NULL;
@@ -275,14 +279,15 @@ static int au_dr_hino(struct super_block *sb, aufs_bindex_t bindex,
 					iput(delegated);
 				err = 0;
 			}
-			goto out_dput;
+			goto out_mnt_write;
 		} else if (!d_is_positive(hinopath.dentry)) {
 			err = vfsub_create(dir, &hinopath, 0600,
 					   /*want_excl*/false);
 			AuTraceErr(err);
 			if (unlikely(err))
-				goto out_dput;
+				goto out_mnt_write;
 		}
+		vfsub_mnt_drop_write(hinopath.mnt);
 		flags = O_WRONLY;
 	}
 	hinofile = vfsub_dentry_open(&hinopath, flags);
@@ -304,6 +309,8 @@ static int au_dr_hino(struct super_block *sb, aufs_bindex_t bindex,
 	fput(hinofile);
 	goto out;
 
+out_mnt_write:
+	vfsub_mnt_drop_write(hinopath.mnt);
 out_dput:
 	dput(hinopath.dentry);
 out_unlock:

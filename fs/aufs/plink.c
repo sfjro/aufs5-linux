@@ -260,11 +260,14 @@ static int do_whplink(struct qstr *tgt, struct path *h_ppath,
 	h_dir = d_inode(h_ppath->dentry);
 	inode_lock_nested(h_dir, AuLsc_I_CHILD2);
 	h_path.mnt = h_ppath->mnt;
+	err = vfsub_mnt_want_write(h_path.mnt);
+	if (unlikely(err))
+		goto out;
 again:
 	h_path.dentry = vfsub_lkup_one(tgt, h_ppath);
 	err = PTR_ERR(h_path.dentry);
 	if (IS_ERR(h_path.dentry))
-		goto out;
+		goto out_mnt_write;
 
 	err = 0;
 	/* wh.plink dir is not monitored */
@@ -294,6 +297,8 @@ again:
 	}
 	dput(h_path.dentry);
 
+out_mnt_write:
+	vfsub_mnt_drop_write(h_path.mnt);
 out:
 	inode_unlock(h_dir);
 	return err;

@@ -180,13 +180,16 @@ struct file *au_xino_create(struct super_block *sb, char *fpath, int silent,
 	h_parent = au_dget_parent_lock(d, AuLsc_I_PARENT);
 	if (!wbrtop)
 		mutex_unlock(&mtx);
-	/* mnt_want_write() is unnecessary here */
 	h_dir = d_inode(h_parent);
 	inode = file_inode(file);
-	/* no delegation since it is just created */
-	if (vfsub_inode_nlink(inode, AU_I_BRANCH))
-		err = vfsub_unlink(h_dir, &file->f_path, /*delegated*/NULL,
-				   /*force*/0);
+	if (vfsub_inode_nlink(inode, AU_I_BRANCH)) {
+		err = vfsub_mnt_want_write(file->f_path.mnt);
+		if (!err) {
+			err = vfsub_unlink(h_dir, &file->f_path,
+					   /*delegated*/NULL, /*force*/0);
+			vfsub_mnt_drop_write(file->f_path.mnt);
+		}
+	}
 	inode_unlock(h_dir);
 	dput(h_parent);
 	if (unlikely(err)) {
@@ -245,21 +248,24 @@ struct file *au_xino_create2(struct super_block *sb, struct path *base,
 		goto out;
 	}
 
-	/* no need to mnt_want_write() since we call dentry_open() later */
+	path.mnt = base->mnt;
+	err = vfsub_mnt_want_write(path.mnt);
+	if (unlikely(err))
+		goto out_dput;
+
 	err = vfs_create(mnt_idmap(base->mnt), dir, path.dentry, 0666, NULL);
 	if (unlikely(err)) {
 		file = ERR_PTR(err);
 		pr_err("%pd create err %d\n", dentry, err);
-		goto out_dput;
+		goto out_mnt_write;
 	}
 
-	path.mnt = base->mnt;
 	file = vfsub_dentry_open(&path,
 				 O_RDWR | O_CREAT | O_EXCL | O_LARGEFILE
 				 /* | __FMODE_NONOTIFY */);
 	if (IS_ERR(file)) {
 		pr_err("%pd open err %ld\n", dentry, PTR_ERR(file));
-		goto out_dput;
+		goto out_mnt_write;
 	}
 
 	delegated = NULL;
@@ -284,11 +290,13 @@ struct file *au_xino_create2(struct super_block *sb, struct path *base,
 			goto out_fput;
 		}
 	}
-	goto out_dput; /* success */
+	goto out_mnt_write; /* success */
 
 out_fput:
 	fput(file);
 	file = ERR_PTR(err);
+out_mnt_write:
+	vfsub_mnt_drop_write(path.mnt);
 out_dput:
 	dput(path.dentry);
 out:

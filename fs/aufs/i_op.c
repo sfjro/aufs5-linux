@@ -987,16 +987,20 @@ static int aufs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 	}
 
 	a->h_path.mnt = au_sbr_mnt(sb, a->btgt);
+	err = vfsub_mnt_want_write(a->h_path.mnt);
+	if (unlikely(err))
+		goto out_unlock;
+
 	if ((ia->ia_valid & (ATTR_MODE | ATTR_CTIME))
 	    == (ATTR_MODE | ATTR_CTIME)) {
 		err = security_path_chmod(&a->h_path, ia->ia_mode);
 		if (unlikely(err))
-			goto out_unlock;
+			goto out_mnt_write;
 	} else if ((ia->ia_valid & (ATTR_UID | ATTR_GID))
 		   && (ia->ia_valid & ATTR_CTIME)) {
 		err = security_path_chown(&a->h_path, ia->ia_uid, ia->ia_gid);
 		if (unlikely(err))
-			goto out_unlock;
+			goto out_mnt_write;
 	}
 
 	if (ia->ia_valid & ATTR_SIZE) {
@@ -1035,6 +1039,8 @@ static int aufs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 	if (!err)
 		au_cpup_attr_changeable(inode);
 
+out_mnt_write:
+	vfsub_mnt_drop_write(a->h_path.mnt);
 out_unlock:
 	inode_unlock(a->h_inode);
 	au_unpin(&a->pin);
