@@ -283,13 +283,15 @@ int vfsub_create(struct inode *dir, struct path *path, int mode, bool want_excl)
 {
 	int err;
 	struct dentry *d;
+	struct inode *inode;
 	struct mnt_idmap *idmap;
 
 	IMustLock(dir);
 
 	d = path->dentry;
 	path->dentry = d->d_parent;
-	err = security_path_mknod(path, d, mode, 0);
+	inode = d_inode(path->dentry);
+	err = security_path_mknod(path, d, mode_strip_umask(inode, mode), 0);
 	path->dentry = d;
 	if (unlikely(err))
 		goto out;
@@ -353,13 +355,16 @@ int vfsub_mknod(struct inode *dir, struct path *path, int mode, dev_t dev)
 {
 	int err;
 	struct dentry *d;
+	struct inode *inode;
 	struct mnt_idmap *idmap;
 
 	IMustLock(dir);
 
 	d = path->dentry;
 	path->dentry = d->d_parent;
-	err = security_path_mknod(path, d, mode, new_encode_dev(dev));
+	inode = d_inode(path->dentry);
+	err = security_path_mknod(path, d, mode_strip_umask(inode, mode),
+				  new_encode_dev(dev));
 	path->dentry = d;
 	if (unlikely(err))
 		goto out;
@@ -493,13 +498,15 @@ int vfsub_mkdir(struct inode *dir, struct path *path, int mode)
 {
 	int err;
 	struct dentry *d;
+	struct inode *inode;
 	struct mnt_idmap *idmap;
 
 	IMustLock(dir);
 
 	d = path->dentry;
 	path->dentry = d->d_parent;
-	err = security_path_mkdir(path, d, mode);
+	inode = d_inode(path->dentry);
+	err = security_path_mkdir(path, d, mode_strip_umask(inode, mode));
 	path->dentry = d;
 	if (unlikely(err))
 		goto out;
