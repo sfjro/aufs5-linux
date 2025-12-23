@@ -749,11 +749,9 @@ int vfsub_sio_mkdir(struct inode *dir, struct path *path, int mode)
 
 	idmap = mnt_idmap(path->mnt);
 	do_sio = au_test_h_perm_sio(idmap, dir, MAY_EXEC | MAY_WRITE);
-	if (!do_sio) {
-		lockdep_off();
+	if (!do_sio)
 		err = vfsub_mkdir(dir, path, mode);
-		lockdep_on();
-	} else {
+	else {
 		struct au_vfsub_mkdir_args args = {
 			.errp	= &err,
 			.dir	= dir,
