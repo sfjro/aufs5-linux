@@ -386,7 +386,7 @@ static int au_ready_to_write_wh(struct file *file, loff_t len,
 
 	if (!err
 	    && (vfsub_inode_nlink(inode, AU_I_AUFS) > 1
-		|| (inode->i_state & I_LINKABLE))
+		|| au_ii(inode)->ii_tmpfile)
 	    && au_opt_test(au_mntflags(cpg.dentry->d_sb), PLINK))
 		au_plink_append(inode, bcpup, au_h_dptr(cpg.dentry, bcpup));
 

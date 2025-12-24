@@ -492,6 +492,7 @@ int aufs_tmpfile(struct mnt_idmap *idmap, struct inode *dir,
 	}
 
 	vfsub_inode_nlink_init(inode, 1);
+	au_ii(inode)->ii_tmpfile = 1;
 	d_tmpfile(file, inode);
 	au_di(dentry)->di_tmpfile = 1;
 	get_file(h_file);

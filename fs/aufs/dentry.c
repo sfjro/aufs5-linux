@@ -1100,8 +1100,10 @@ static int aufs_d_revalidate(struct dentry *dentry, unsigned int flags)
 	err = -EINVAL;
 	if (!(flags & (LOOKUP_OPEN | LOOKUP_EMPTY))
 	    && inode
-	    && !(inode->i_state && I_LINKABLE)
-	    && (IS_DEADDIR(inode) || !vfsub_inode_nlink(inode, AU_I_AUFS))) {
+	    && (IS_DEADDIR(inode)
+		|| (!vfsub_inode_nlink(inode, AU_I_AUFS)
+		    && !au_ii(inode)->ii_tmpfile))
+		) {
 		AuTraceErr(err);
 		goto out_inval;
 	}
