@@ -502,7 +502,7 @@ static int au_do_cpup_regular(struct au_cp_generic *cpg,
 	int err, rerr;
 	loff_t l;
 	struct path h_path;
-	struct inode *h_src_inode, *h_dst_inode;
+	struct inode *h_src_inode;
 
 	err = 0;
 	h_src_inode = au_h_iptr(d_inode(cpg->dentry), cpg->bsrc);
@@ -539,13 +539,6 @@ static int au_do_cpup_regular(struct au_cp_generic *cpg,
 		rerr = au_pin_hdir_relock(cpg->pin);
 		if (!err && rerr)
 			err = rerr;
-	}
-	if (!err && (h_src_inode->i_state & I_LINKABLE)) {
-		h_path.dentry = au_h_dptr(cpg->dentry, cpg->bdst);
-		h_dst_inode = d_inode(h_path.dentry);
-		spin_lock(&h_dst_inode->i_lock);
-		h_dst_inode->i_state |= I_LINKABLE;
-		spin_unlock(&h_dst_inode->i_lock);
 	}
 
 out:
@@ -704,7 +697,7 @@ int cpup_entry(struct au_cp_generic *cpg, struct dentry *dst_parent,
 	    && !isdir
 	    && au_opt_test(mnt_flags, XINO)
 	    && (vfsub_inode_nlink(h_inode, AU_I_BRANCH) == 1
-		|| (h_inode->i_state & I_LINKABLE))
+		|| au_ii(d_inode(cpg->dentry))->ii_tmpfile)
 	    /* todo: unnecessary? */
 	    /* && d_inode(cpg->dentry)->i_nlink == 1 */
 	    && cpg->bdst < cpg->bsrc
@@ -916,7 +909,7 @@ static int au_cpup_single(struct au_cp_generic *cpg, struct dentry *dst_parent)
 	src_inode = d_inode(h_src);
 	if (!isdir
 	    && (vfsub_inode_nlink(src_inode, AU_I_BRANCH) > 1
-		|| src_inode->i_state & I_LINKABLE)
+		|| au_ii(inode)->ii_tmpfile)
 	    && plink)
 		au_plink_append(inode, cpg->bdst, h_dst);
 
