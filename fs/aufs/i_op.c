@@ -926,7 +926,7 @@ static int aufs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 			struct iattr *ia)
 {
 	int err;
-	struct inode *inode, *delegated;
+	struct inode *inode;
 	struct super_block *sb;
 	struct file *file;
 	struct au_icpup_args *a;
@@ -1016,18 +1016,8 @@ static int aufs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 		inode_unlock(a->h_inode);
 		err = vfsub_trunc(&a->h_path, ia->ia_size, ia->ia_valid, f);
 		inode_lock_nested(a->h_inode, AuLsc_I_CHILD);
-	} else {
-		delegated = NULL;
-		while (1) {
-			err = vfsub_notify_change(&a->h_path, ia, &delegated);
-			if (delegated) {
-				err = break_deleg_wait(&delegated);
-				if (!err)
-					continue;
-			}
-			break;
-		}
-	}
+	} else
+		err = vfsub_notify_change(&a->h_path, ia);
 	/*
 	 * regardless aufs 'acl' option setting.
 	 * why don't all acl-aware fs call this func from their ->setattr()?

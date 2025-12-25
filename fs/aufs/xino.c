@@ -185,8 +185,7 @@ struct file *au_xino_create(struct super_block *sb, char *fpath, int silent,
 	if (vfsub_inode_nlink(inode, AU_I_BRANCH)) {
 		err = vfsub_mnt_want_write(file->f_path.mnt);
 		if (!err) {
-			err = vfsub_unlink(h_dir, &file->f_path,
-					   /*delegated*/NULL, /*force*/0);
+			err = vfsub_unlink(h_dir, &file->f_path, /*force*/0);
 			vfsub_mnt_drop_write(file->f_path.mnt);
 		}
 	}
@@ -226,7 +225,7 @@ struct file *au_xino_create2(struct super_block *sb, struct path *base,
 {
 	struct file *file;
 	struct dentry *dentry;
-	struct inode *dir, *delegated;
+	struct inode *dir;
 	struct qstr *name;
 	struct path ppath, path;
 	int err, do_unlock;
@@ -268,15 +267,9 @@ struct file *au_xino_create2(struct super_block *sb, struct path *base,
 		goto out_mnt_write;
 	}
 
-	delegated = NULL;
-	err = vfsub_unlink(dir, &file->f_path, &delegated, /*force*/0);
+	err = vfsub_unlink(dir, &file->f_path, /*force*/0);
 	au_xino_unlock_dir(&ldir);
 	do_unlock = 0;
-	if (unlikely(err == -EWOULDBLOCK)) {
-		pr_warn("cannot retry for NFSv4 delegation"
-			" for an internal unlink\n");
-		iput(delegated);
-	}
 	if (unlikely(err)) {
 		pr_err("%pd unlink err %d\n", dentry, err);
 		goto out_fput;

@@ -29,14 +29,13 @@ int au_cpdown_attr(struct path *h_path, struct dentry *h_src)
 	ia.ia_gid = h_isrc->i_gid;
 	sbits = !!(ia.ia_mode & (S_ISUID | S_ISGID));
 	au_cpup_attr_flags(d_inode(h_path->dentry), h_isrc->i_flags);
-	/* no delegation since it is just created */
-	err = vfsub_sio_notify_change(h_path, &ia, /*delegated*/NULL);
+	err = vfsub_sio_notify_change(h_path, &ia);
 
 	/* is this nfs only? */
 	if (!err && sbits && au_test_nfs(h_path->dentry->d_sb)) {
 		ia.ia_valid = ATTR_FORCE | ATTR_MODE;
 		ia.ia_mode = h_isrc->i_mode;
-		err = vfsub_sio_notify_change(h_path, &ia, /*delegated*/NULL);
+		err = vfsub_sio_notify_change(h_path, &ia);
 	}
 
 	vfsub_mnt_drop_write(h_path->mnt);
