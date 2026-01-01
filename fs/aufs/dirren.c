@@ -220,7 +220,7 @@ static int au_dr_hino(struct super_block *sb, aufs_bindex_t bindex,
 	unsigned char load, suspend;
 	struct file *hinofile;
 	struct au_hinode *hdir;
-	struct inode *dir, *delegated;
+	struct inode *dir;
 	struct path hinopath;
 	struct qstr hinoname = QSTR_INIT(AUFS_WH_DR_BRHINO,
 					 sizeof(AUFS_WH_DR_BRHINO) - 1);
@@ -262,27 +262,28 @@ static int au_dr_hino(struct super_block *sb, aufs_bindex_t bindex,
 		if (d_is_negative(hinopath.dentry))
 			goto out_dput; /* success */
 	} else {
+		err = vfsub_mnt_want_write(hinopath.mnt);
+		AuTraceErr(err);
+		if (unlikely(err))
+			goto out_dput;
 		if (au_dr_hino_test_empty(&br->br_dirren)) {
 			if (d_is_positive(hinopath.dentry)) {
-				delegated = NULL;
-				err = vfsub_unlink(dir, &hinopath, &delegated,
-						   /*force*/0);
+				err = vfsub_unlink(dir, &hinopath, /*force*/0);
 				AuTraceErr(err);
 				if (unlikely(err))
 					pr_err("ignored err %d, %pd2\n",
 					       err, hinopath.dentry);
-				if (unlikely(err == -EWOULDBLOCK))
-					iput(delegated);
 				err = 0;
 			}
-			goto out_dput;
+			goto out_mnt_write;
 		} else if (!d_is_positive(hinopath.dentry)) {
 			err = vfsub_create(dir, &hinopath, 0600,
 					   /*want_excl*/false);
 			AuTraceErr(err);
 			if (unlikely(err))
-				goto out_dput;
+				goto out_mnt_write;
 		}
+		vfsub_mnt_drop_write(hinopath.mnt);
 		flags = O_WRONLY;
 	}
 	hinofile = vfsub_dentry_open(&hinopath, flags);
@@ -304,6 +305,8 @@ static int au_dr_hino(struct super_block *sb, aufs_bindex_t bindex,
 	fput(hinofile);
 	goto out;
 
+out_mnt_write:
+	vfsub_mnt_drop_write(hinopath.mnt);
 out_dput:
 	dput(hinopath.dentry);
 out_unlock:
@@ -599,7 +602,7 @@ static int au_drinfo_do_store(struct au_drinfo_store *w,
 	struct path infopath = {
 		.mnt = w->h_ppath.mnt
 	};
-	struct inode *h_dir, *h_inode, *delegated;
+	struct inode *h_dir, *h_inode;
 	struct file *infofile;
 	struct qstr *qname;
 
@@ -646,11 +649,8 @@ static int au_drinfo_do_store(struct au_drinfo_store *w,
 	}
 
 	if (elm && w->renameback) {
-		delegated = NULL;
-		err = vfsub_unlink(h_dir, &infopath, &delegated, /*force*/0);
+		err = vfsub_unlink(h_dir, &infopath, /*force*/0);
 		AuTraceErr(err);
-		if (unlikely(err == -EWOULDBLOCK))
-			iput(delegated);
 		goto out_fput;
 	}
 
@@ -750,7 +750,7 @@ static void au_drinfo_store_rev(struct au_drinfo_rev *rev,
 				struct au_drinfo_store *w)
 {
 	struct au_drinfo_rev_elm *elm;
-	struct inode *h_dir, *delegated;
+	struct inode *h_dir;
 	int err, nelm;
 	struct path infopath = {
 		.mnt = w->h_ppath.mnt
@@ -765,13 +765,9 @@ static void au_drinfo_store_rev(struct au_drinfo_rev *rev,
 		AuDebugOn(elm->created && elm->info_last);
 		if (elm->created) {
 			AuDbg("here\n");
-			delegated = NULL;
 			infopath.dentry = elm->info_dentry;
-			err = vfsub_unlink(h_dir, &infopath, &delegated,
-					   !w->no_sio);
+			err = vfsub_unlink(h_dir, &infopath, !w->no_sio);
 			AuTraceErr(err);
-			if (unlikely(err == -EWOULDBLOCK))
-				iput(delegated);
 			dput(elm->info_dentry);
 		} else if (elm->info_last) {
 			AuDbg("here\n");
@@ -1059,7 +1055,7 @@ static int au_drinfo_load(struct au_drinfo_load *w, aufs_bindex_t bindex,
 		= AUFS_WH_DR_INFO_PFX;
 	struct au_drinfo *drinfo;
 	struct qstr oldname;
-	struct inode *h_dir, *delegated;
+	struct inode *h_dir;
 	struct dentry *info_dentry;
 	struct path infopath;
 
@@ -1096,14 +1092,11 @@ static int au_drinfo_load(struct au_drinfo_load *w, aufs_bindex_t bindex,
 		infopath.dentry = info_dentry;
 		infopath.mnt = w->h_ppath.mnt;
 		h_dir = d_inode(w->h_ppath.dentry);
-		delegated = NULL;
 		inode_lock_nested(h_dir, AuLsc_I_PARENT);
-		e = vfsub_unlink(h_dir, &infopath, &delegated, !w->no_sio);
+		e = vfsub_unlink(h_dir, &infopath, !w->no_sio);
 		inode_unlock(h_dir);
 		if (unlikely(e))
 			AuIOErr("ignored %d, %pd2\n", e, &infopath.dentry);
-		if (unlikely(e == -EWOULDBLOCK))
-			iput(delegated);
 	}
 	au_kfree_rcu(w->drinfo[bindex]);
 	w->drinfo[bindex] = drinfo;
