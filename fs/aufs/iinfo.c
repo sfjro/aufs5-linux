@@ -135,7 +135,7 @@ void au_update_ibrange(struct inode *inode, int do_put_zero)
 			h_i = au_hinode(iinfo, bindex)->hi_inode;
 			if (h_i
 			    && !vfsub_inode_nlink(h_i, AU_I_BRANCH)
-			    && !(h_i->i_state & I_LINKABLE))
+			    && !iinfo->ii_tmpfile)
 				au_set_h_iptr(inode, bindex, NULL, 0);
 		}
 	}
@@ -201,6 +201,7 @@ int au_iinfo_init(struct inode *inode)
 		iinfo->ii_generation.ig_generation = au_sigen(sb);
 		iinfo->ii_btop = -1;
 		iinfo->ii_bbot = -1;
+		iinfo->ii_tmpfile = 0;
 		iinfo->ii_vdir = NULL;
 		return 0;
 	}
