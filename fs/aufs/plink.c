@@ -255,45 +255,37 @@ static int do_whplink(struct qstr *tgt, struct path *h_ppath,
 {
 	int err;
 	struct path h_path;
-	struct inode *h_dir, *delegated;
+	struct inode *h_dir;
 
 	h_dir = d_inode(h_ppath->dentry);
 	inode_lock_nested(h_dir, AuLsc_I_CHILD2);
 	h_path.mnt = h_ppath->mnt;
+	err = vfsub_mnt_want_write(h_path.mnt);
+	if (unlikely(err))
+		goto out;
 again:
 	h_path.dentry = vfsub_lkup_one(tgt, h_ppath);
 	err = PTR_ERR(h_path.dentry);
 	if (IS_ERR(h_path.dentry))
-		goto out;
+		goto out_mnt_write;
 
 	err = 0;
 	/* wh.plink dir is not monitored */
 	/* todo: is it really safe? */
 	if (d_is_positive(h_path.dentry)
 	    && d_inode(h_path.dentry) != d_inode(h_dentry)) {
-		delegated = NULL;
-		err = vfsub_unlink(h_dir, &h_path, &delegated, /*force*/0);
-		if (unlikely(err == -EWOULDBLOCK)) {
-			pr_warn("cannot retry for NFSv4 delegation"
-				" for an internal unlink\n");
-			iput(delegated);
-		}
+		err = vfsub_unlink(h_dir, &h_path, /*force*/0);
 		dput(h_path.dentry);
 		h_path.dentry = NULL;
 		if (!err)
 			goto again;
 	}
-	if (!err && d_is_negative(h_path.dentry)) {
-		delegated = NULL;
-		err = vfsub_link(h_dentry, h_dir, &h_path, &delegated);
-		if (unlikely(err == -EWOULDBLOCK)) {
-			pr_warn("cannot retry for NFSv4 delegation"
-				" for an internal link\n");
-			iput(delegated);
-		}
-	}
+	if (!err && d_is_negative(h_path.dentry))
+		err = vfsub_link(h_dentry, h_dir, &h_path);
 	dput(h_path.dentry);
 
+out_mnt_write:
+	vfsub_mnt_drop_write(h_path.mnt);
 out:
 	inode_unlock(h_dir);
 	return err;
