@@ -201,11 +201,9 @@ int vfsub_create(struct inode *dir, struct path *path, int mode,
 int vfsub_symlink(struct inode *dir, struct path *path,
 		  const char *symname);
 int vfsub_mknod(struct inode *dir, struct path *path, int mode, dev_t dev);
-int vfsub_link(struct dentry *src_dentry, struct inode *dir,
-	       struct path *path, struct inode **delegated_inode);
+int vfsub_link(struct dentry *src_dentry, struct inode *dir, struct path *path);
 int vfsub_rename(struct inode *src_hdir, struct dentry *src_dentry,
-		 struct inode *hdir, struct path *path,
-		 struct inode **delegated_inode, unsigned int flags);
+		 struct inode *hdir, struct path *path, unsigned int flags);
 struct dentry *vfsub_mkdir(struct inode *dir, struct path *path, int mode);
 int vfsub_rmdir(struct inode *dir, struct path *path);
 
@@ -353,12 +351,9 @@ static inline loff_t vfsub_llseek(struct file *file, loff_t offset, int origin)
 
 struct dentry *vfsub_sio_mkdir(struct inode *dir, struct path *path, int mode);
 int vfsub_sio_rmdir(struct inode *dir, struct path *path);
-int vfsub_sio_notify_change(struct path *path, struct iattr *ia,
-			    struct inode **delegated_inode);
-int vfsub_notify_change(const struct path *path, struct iattr *ia,
-			struct inode **delegated_inode);
-int vfsub_unlink(struct inode *dir, const struct path *path,
-		 struct inode **delegated_inode, int force);
+int vfsub_sio_notify_change(struct path *path, struct iattr *ia);
+int vfsub_notify_change(const struct path *path, struct iattr *ia);
+int vfsub_unlink(struct inode *dir, const struct path *path, int force);
 
 static inline int vfsub_getattr(const struct path *path, struct kstat *st)
 {
