@@ -60,6 +60,7 @@ struct au_iinfo {
 
 	struct au_rwsem		ii_rwsem;
 	aufs_bindex_t		ii_btop, ii_bbot;
+	unsigned char		ii_tmpfile;	/* born with nlink == 0 */
 	__u32			ii_higen;
 	struct au_hinode	*ii_hinode;
 	struct au_vdir		*ii_vdir;
