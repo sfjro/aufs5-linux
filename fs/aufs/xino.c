@@ -252,7 +252,7 @@ struct file *au_xino_create2(struct super_block *sb, const struct path *base,
 	if (unlikely(err))
 		goto out_dput;
 
-	err = vfs_create(mnt_idmap(base->mnt), dir, path.dentry, 0666, NULL);
+	err = vfs_create(mnt_idmap(base->mnt), path.dentry, 0666, NULL);
 	if (unlikely(err)) {
 		file = ERR_PTR(err);
 		pr_err("%pd create err %d\n", dentry, err);

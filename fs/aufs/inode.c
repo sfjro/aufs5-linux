@@ -404,8 +404,9 @@ new_ino:
 	if (IS_ERR(inode))
 		goto out_xinondir;
 
-	AuDbg("%x, new %d\n", inode->i_state, !!(inode->i_state & I_NEW));
-	if (inode->i_state & I_NEW) {
+	AuDbg("%x, new %d\n", inode_state_read_once(inode),
+	      !!(inode_state_read_once(inode) & I_NEW));
+	if (inode_state_read_once(inode) & I_NEW) {
 		ii_write_lock_new_child(inode);
 		err = set_inode(inode, dentry);
 		if (!err) {

@@ -56,7 +56,7 @@ int au_do_open_nondir(struct file *file, int flags, struct file *h_file)
 		if (!(flags & O_EXCL)) {
 			h_inode = file_inode(h_file);
 			spin_lock(&h_inode->i_lock);
-			h_inode->i_state |= I_LINKABLE;
+			inode_state_set(h_inode, I_LINKABLE);
 			spin_unlock(&h_inode->i_lock);
 		}
 	}
