@@ -283,10 +283,11 @@ void vfsub_unlock_rename(struct dentry *d1, struct au_hinode *hdir1,
 
 int vfsub_create(struct inode *dir, struct path *path, int mode, bool want_excl)
 {
-	int err;
+	int err, e;
 	struct dentry *d;
 	struct inode *inode;
 	struct mnt_idmap *idmap;
+	struct delegated_inode deleg = {};
 
 	IMustLock(dir);
 
@@ -297,11 +298,19 @@ int vfsub_create(struct inode *dir, struct path *path, int mode, bool want_excl)
 	path->dentry = d;
 	if (unlikely(err))
 		goto out;
-	idmap = mnt_idmap(path->mnt);
 
-	lockdep_off();
-	err = vfs_create(idmap, dir, path->dentry, mode, want_excl);
-	lockdep_on();
+	idmap = mnt_idmap(path->mnt);
+	do {
+		lockdep_off();
+		err = vfs_create(idmap, d, mode, &deleg);
+		lockdep_on();
+		if (is_delegated(&deleg)) {
+			e = break_deleg_wait(&deleg);
+			if (!e)
+				continue;
+		}
+		break;
+	} while (1);
 	if (!err) {
 		struct path tmp = *path;
 		int did;
@@ -321,9 +330,10 @@ out:
 
 int vfsub_symlink(struct inode *dir, struct path *path, const char *symname)
 {
-	int err;
+	int err, e;
 	struct dentry *d;
 	struct mnt_idmap *idmap;
+	struct delegated_inode deleg = {};
 
 	IMustLock(dir);
 
@@ -333,11 +343,19 @@ int vfsub_symlink(struct inode *dir, struct path *path, const char *symname)
 	path->dentry = d;
 	if (unlikely(err))
 		goto out;
-	idmap = mnt_idmap(path->mnt);
 
-	lockdep_off();
-	err = vfs_symlink(idmap, dir, path->dentry, symname);
-	lockdep_on();
+	idmap = mnt_idmap(path->mnt);
+	do {
+		lockdep_off();
+		err = vfs_symlink(idmap, dir, d, symname, &deleg);
+		lockdep_on();
+		if (is_delegated(&deleg)) {
+			e = break_deleg_wait(&deleg);
+			if (!e)
+				continue;
+		}
+		break;
+	} while (1);
 	if (!err) {
 		struct path tmp = *path;
 		int did;
@@ -356,10 +374,11 @@ out:
 
 int vfsub_mknod(struct inode *dir, struct path *path, int mode, dev_t dev)
 {
-	int err;
+	int err, e;
 	struct dentry *d;
 	struct inode *inode;
 	struct mnt_idmap *idmap;
+	struct delegated_inode deleg = {};
 
 	IMustLock(dir);
 
@@ -371,11 +390,19 @@ int vfsub_mknod(struct inode *dir, struct path *path, int mode, dev_t dev)
 	path->dentry = d;
 	if (unlikely(err))
 		goto out;
-	idmap = mnt_idmap(path->mnt);
 
-	lockdep_off();
-	err = vfs_mknod(idmap, dir, path->dentry, mode, dev);
-	lockdep_on();
+	idmap = mnt_idmap(path->mnt);
+	do {
+		lockdep_off();
+		err = vfs_mknod(idmap, dir, path->dentry, mode, dev, &deleg);
+		lockdep_on();
+		if (is_delegated(&deleg)) {
+			e = break_deleg_wait(&deleg);
+			if (!e)
+				continue;
+		}
+		break;
+	} while (1);
 	if (!err) {
 		struct path tmp = *path;
 		int did;
@@ -407,7 +434,7 @@ int vfsub_link(struct dentry *src_dentry, struct inode *dir, struct path *path)
 	int err, e;
 	struct dentry *d;
 	struct mnt_idmap *idmap;
-	struct inode *deleg = NULL;
+	struct delegated_inode deleg = {};
 
 	IMustLock(dir);
 
@@ -428,7 +455,7 @@ int vfsub_link(struct dentry *src_dentry, struct inode *dir, struct path *path)
 		lockdep_off();
 		err = vfs_link(src_dentry, idmap, dir, path->dentry, &deleg);
 		lockdep_on();
-		if (deleg) {
+		if (is_delegated(&deleg)) {
 			e = break_deleg_wait(&deleg);
 			if (!e)
 				continue;
@@ -459,7 +486,7 @@ int vfsub_rename(struct inode *src_dir, struct dentry *src_dentry,
 {
 	int err, e;
 	struct renamedata rd;
-	struct inode *deleg = NULL;
+	struct delegated_inode deleg = {};
 	struct path tmp = {
 		.mnt	= path->mnt
 	};
@@ -487,7 +514,7 @@ int vfsub_rename(struct inode *src_dir, struct dentry *src_dentry,
 		lockdep_off();
 		err = vfs_rename(&rd);
 		lockdep_on();
-		if (deleg) {
+		if (is_delegated(&deleg)) {
 			e = break_deleg_wait(&deleg);
 			if (!e)
 				continue;
@@ -514,11 +541,12 @@ out:
 
 struct dentry *vfsub_mkdir(struct inode *dir, struct path *path, int mode)
 {
-	int err, did;
+	int err, e, did;
 	struct dentry *d, *ret;
 	struct inode *inode;
 	struct mnt_idmap *idmap;
 	struct path tmp;
+	struct delegated_inode deleg = {};
 
 	IMustLock(dir);
 
@@ -530,16 +558,27 @@ struct dentry *vfsub_mkdir(struct inode *dir, struct path *path, int mode)
 	ret = ERR_PTR(err);
 	if (unlikely(err))
 		goto out;
-	idmap = mnt_idmap(path->mnt);
 
-	/* vfs_mkdir() calls dput() on error */
-	dget(path->dentry);
-	lockdep_off();
-	ret = vfs_mkdir(idmap, dir, path->dentry, mode);
-	lockdep_on();
+	idmap = mnt_idmap(path->mnt);
+	do {
+		/* on error, vfs_mkdir() calls dput() */
+		/* and unlocks the parent dir. Ouch! */
+		dget(d);
+		lockdep_off();
+		ret = vfs_mkdir(idmap, dir, d, mode, &deleg);
+		if (IS_ERR(ret))
+			inode_lock(dir);
+		lockdep_on();
+		if (is_delegated(&deleg)) {
+			e = break_deleg_wait(&deleg);
+			if (!e)
+				continue;
+		}
+		break;
+	} while (1);
 	if (IS_ERR(ret))
 		goto out;
-	dput(path->dentry);
+	dput(d);
 
 	tmp = *path;
 	if (ret)
@@ -557,9 +596,10 @@ out:
 
 int vfsub_rmdir(struct inode *dir, struct path *path)
 {
-	int err;
+	int err, e;
 	struct dentry *d;
 	struct mnt_idmap *idmap;
+	struct delegated_inode deleg = {};
 
 	IMustLock(dir);
 
@@ -569,11 +609,19 @@ int vfsub_rmdir(struct inode *dir, struct path *path)
 	path->dentry = d;
 	if (unlikely(err))
 		goto out;
-	idmap = mnt_idmap(path->mnt);
 
-	lockdep_off();
-	err = vfs_rmdir(idmap, dir, path->dentry);
-	lockdep_on();
+	idmap = mnt_idmap(path->mnt);
+	do {
+		lockdep_off();
+		err = vfs_rmdir(idmap, dir, d, &deleg);
+		lockdep_on();
+		if (is_delegated(&deleg)) {
+			e = break_deleg_wait(&deleg);
+			if (!e)
+				continue;
+		}
+		break;
+	} while (1);
 	if (!err) {
 		struct path tmp = {
 			.dentry	= path->dentry->d_parent,
@@ -846,7 +894,7 @@ static void call_notify_change(void *args)
 	struct notify_change_args *a = args;
 	struct inode *h_inode;
 	struct mnt_idmap *idmap;
-	struct inode *deleg = NULL;
+	struct delegated_inode deleg = {};
 
 	h_inode = d_inode(a->path->dentry);
 	IMustLock(h_inode);
@@ -860,7 +908,7 @@ static void call_notify_change(void *args)
 		lockdep_off();
 		*a->errp = notify_change(idmap, a->path->dentry, a->ia, &deleg);
 		lockdep_on();
-		if (deleg) {
+		if (is_delegated(&deleg)) {
 			int e;
 
 			e = break_deleg_wait(&deleg);
@@ -920,7 +968,7 @@ static void call_unlink(void *args)
 	struct dentry *d = a->path->dentry;
 	struct inode *h_inode;
 	struct mnt_idmap *idmap;
-	struct inode *deleg = NULL;
+	struct delegated_inode deleg = {};
 	const int stop_sillyrename = (au_test_nfs(d->d_sb)
 				      && au_dcount(d) == 1);
 	struct path tmp = {
@@ -947,7 +995,7 @@ static void call_unlink(void *args)
 		lockdep_off();
 		*a->errp = vfs_unlink(idmap, a->dir, d, &deleg);
 		lockdep_on();
-		if (deleg) {
+		if (is_delegated(&deleg)) {
 			int e;
 
 			e = break_deleg_wait(&deleg);
