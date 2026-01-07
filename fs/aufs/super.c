@@ -52,7 +52,7 @@ struct inode *au_iget_locked(struct super_block *sb, ino_t ino)
 		inode = ERR_PTR(-ENOMEM);
 		goto out;
 	}
-	if (!(inode->i_state & I_NEW))
+	if (!(inode_state_read_once(inode) & I_NEW))
 		goto out;
 
 	err = au_xigen_new(inode);
