@@ -1209,14 +1209,8 @@ static int evict_process_queues_cpsch(struct device_queue_manager *dqm,
 	pr_debug_ratelimited("Evicting process pid %d queues\n",
 			    pdd->process->lead_thread->pid);
 
-	if (dqm->dev->kfd->shared_resources.enable_mes) {
+	if (dqm->dev->kfd->shared_resources.enable_mes)
 		pdd->last_evict_timestamp = get_jiffies_64();
-		retval = suspend_all_queues_mes(dqm);
-		if (retval) {
-			dev_err(dev, "Suspending all queues failed");
-			goto out;
-		}
-	}
 
 	/* Mark all queues as evicted. Deactivate all active queues on
 	 * the qpd.
@@ -1246,10 +1240,6 @@ static int evict_process_queues_cpsch(struct device_queue_manager *dqm,
 					      KFD_UNMAP_QUEUES_FILTER_ALL_QUEUES :
 					      KFD_UNMAP_QUEUES_FILTER_DYNAMIC_QUEUES, 0,
 					      USE_DEFAULT_GRACE_PERIOD);
-	} else {
-		retval = resume_all_queues_mes(dqm);
-		if (retval)
-			dev_err(dev, "Resuming all queues failed");
 	}
 
 out:
@@ -1897,6 +1887,8 @@ fail_packet_manager_init:
 
 static int stop_cpsch(struct device_queue_manager *dqm)
 {
+	int ret = 0;
+
 	dqm_lock(dqm);
 	if (!dqm->sched_running) {
 		dqm_unlock(dqm);
@@ -1904,9 +1896,10 @@ static int stop_cpsch(struct device_queue_manager *dqm)
 	}
 
 	if (!dqm->dev->kfd->shared_resources.enable_mes)
-		unmap_queues_cpsch(dqm, KFD_UNMAP_QUEUES_FILTER_ALL_QUEUES, 0, USE_DEFAULT_GRACE_PERIOD, false);
+		ret = unmap_queues_cpsch(dqm, KFD_UNMAP_QUEUES_FILTER_ALL_QUEUES,
+								0, USE_DEFAULT_GRACE_PERIOD, false);
 	else
-		remove_all_kfd_queues_mes(dqm);
+		ret = remove_all_kfd_queues_mes(dqm);
 
 	dqm->sched_running = false;
 
@@ -1920,7 +1913,7 @@ static int stop_cpsch(struct device_queue_manager *dqm)
 	dqm->detect_hang_info = NULL;
 	dqm_unlock(dqm);
 
-	return 0;
+	return ret;
 }
 
 static int create_kernel_queue_cpsch(struct device_queue_manager *dqm,
@@ -2091,7 +2084,8 @@ int amdkfd_fence_wait_timeout(struct device_queue_manager *dqm,
 
 	while (*fence_addr != fence_value) {
 		/* Fatal err detected, this response won't come */
-		if (amdgpu_amdkfd_is_fed(dqm->dev->adev))
+		if (amdgpu_amdkfd_is_fed(dqm->dev->adev) ||
+		    amdgpu_in_reset(dqm->dev->adev))
 			return -EIO;
 
 		if (time_after(jiffies, end_jiffies)) {
@@ -2915,6 +2909,14 @@ static int allocate_hiq_sdma_mqd(struct device_queue_manager *dqm)
 	return retval;
 }
 
+static void deallocate_hiq_sdma_mqd(struct kfd_node *dev,
+				    struct kfd_mem_obj *mqd)
+{
+	WARN(!mqd, "No hiq sdma mqd trunk to free");
+
+	amdgpu_amdkfd_free_gtt_mem(dev->adev, &mqd->gtt_mem);
+}
+
 struct device_queue_manager *device_queue_manager_init(struct kfd_node *dev)
 {
 	struct device_queue_manager *dqm;
@@ -3038,17 +3040,12 @@ struct device_queue_manager *device_queue_manager_init(struct kfd_node *dev)
 		return dqm;
 	}
 
+	if (!dev->kfd->shared_resources.enable_mes)
+		deallocate_hiq_sdma_mqd(dev, &dqm->hiq_sdma_mqd);
+
 out_free:
 	kfree(dqm);
 	return NULL;
-}
-
-static void deallocate_hiq_sdma_mqd(struct kfd_node *dev,
-				    struct kfd_mem_obj *mqd)
-{
-	WARN(!mqd, "No hiq sdma mqd trunk to free");
-
-	amdgpu_amdkfd_free_gtt_mem(dev->adev, &mqd->gtt_mem);
 }
 
 void device_queue_manager_uninit(struct device_queue_manager *dqm)

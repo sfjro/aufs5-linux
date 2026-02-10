@@ -987,7 +987,7 @@ static int vsock_release(struct socket *sock)
 }
 
 static int
-vsock_bind(struct socket *sock, struct sockaddr *addr, int addr_len)
+vsock_bind(struct socket *sock, struct sockaddr_unsized *addr, int addr_len)
 {
 	int err;
 	struct sock *sk;
@@ -1328,7 +1328,7 @@ out:
 }
 
 static int vsock_dgram_connect(struct socket *sock,
-			       struct sockaddr *addr, int addr_len, int flags)
+			       struct sockaddr_unsized *addr, int addr_len, int flags)
 {
 	int err;
 	struct sock *sk;
@@ -1528,7 +1528,7 @@ static void vsock_connect_timeout(struct work_struct *work)
 	sock_put(sk);
 }
 
-static int vsock_connect(struct socket *sock, struct sockaddr *addr,
+static int vsock_connect(struct socket *sock, struct sockaddr_unsized *addr,
 			 int addr_len, int flags)
 {
 	int err;
@@ -1787,6 +1787,10 @@ static int vsock_accept(struct socket *sock, struct socket *newsock,
 		} else {
 			newsock->state = SS_CONNECTED;
 			sock_graft(connected, newsock);
+
+			set_bit(SOCK_CUSTOM_SOCKOPT,
+				&connected->sk_socket->flags);
+
 			if (vsock_msgzerocopy_allow(vconnected->transport))
 				set_bit(SOCK_SUPPORT_ZC,
 					&connected->sk_socket->flags);

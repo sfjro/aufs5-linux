@@ -101,10 +101,8 @@ drm_gem_init(struct drm_device *dev)
 
 	vma_offset_manager = drmm_kzalloc(dev, sizeof(*vma_offset_manager),
 					  GFP_KERNEL);
-	if (!vma_offset_manager) {
-		DRM_ERROR("out of memory\n");
+	if (!vma_offset_manager)
 		return -ENOMEM;
-	}
 
 	dev->vma_offset_manager = vma_offset_manager;
 	drm_vma_offset_manager_init(vma_offset_manager,
@@ -785,9 +783,9 @@ static int objects_lookup(struct drm_file *filp, u32 *handle, int count,
 int drm_gem_objects_lookup(struct drm_file *filp, void __user *bo_handles,
 			   int count, struct drm_gem_object ***objs_out)
 {
-	int ret;
-	u32 *handles;
 	struct drm_gem_object **objs;
+	u32 *handles;
+	int ret;
 
 	if (!count)
 		return 0;
@@ -799,20 +797,11 @@ int drm_gem_objects_lookup(struct drm_file *filp, void __user *bo_handles,
 
 	*objs_out = objs;
 
-	handles = kvmalloc_array(count, sizeof(u32), GFP_KERNEL);
-	if (!handles) {
-		ret = -ENOMEM;
-		goto out;
-	}
-
-	if (copy_from_user(handles, bo_handles, count * sizeof(u32))) {
-		ret = -EFAULT;
-		DRM_DEBUG("Failed to copy in GEM handles\n");
-		goto out;
-	}
+	handles = vmemdup_array_user(bo_handles, count, sizeof(u32));
+	if (IS_ERR(handles))
+		return PTR_ERR(handles);
 
 	ret = objects_lookup(filp, handles, count, objs);
-out:
 	kvfree(handles);
 	return ret;
 
@@ -855,12 +844,13 @@ EXPORT_SYMBOL(drm_gem_object_lookup);
 long drm_gem_dma_resv_wait(struct drm_file *filep, u32 handle,
 				    bool wait_all, unsigned long timeout)
 {
-	long ret;
+	struct drm_device *dev = filep->minor->dev;
 	struct drm_gem_object *obj;
+	long ret;
 
 	obj = drm_gem_object_lookup(filep, handle);
 	if (!obj) {
-		DRM_DEBUG("Failed to look up GEM BO %d\n", handle);
+		drm_dbg_core(dev, "Failed to look up GEM BO %d\n", handle);
 		return -EINVAL;
 	}
 
@@ -970,33 +960,41 @@ int drm_gem_change_handle_ioctl(struct drm_device *dev, void *data,
 {
 	struct drm_gem_change_handle *args = data;
 	struct drm_gem_object *obj;
-	int ret;
+	int handle, ret;
 
 	if (!drm_core_check_feature(dev, DRIVER_GEM))
 		return -EOPNOTSUPP;
+
+	/* idr_alloc() limitation. */
+	if (args->new_handle > INT_MAX)
+		return -EINVAL;
+	handle = args->new_handle;
 
 	obj = drm_gem_object_lookup(file_priv, args->handle);
 	if (!obj)
 		return -ENOENT;
 
-	if (args->handle == args->new_handle)
-		return 0;
+	if (args->handle == handle) {
+		ret = 0;
+		goto out;
+	}
 
 	mutex_lock(&file_priv->prime.lock);
 
 	spin_lock(&file_priv->table_lock);
-	ret = idr_alloc(&file_priv->object_idr, obj,
-		args->new_handle, args->new_handle + 1, GFP_NOWAIT);
+	ret = idr_alloc(&file_priv->object_idr, obj, handle, handle + 1,
+			GFP_NOWAIT);
 	spin_unlock(&file_priv->table_lock);
 
 	if (ret < 0)
 		goto out_unlock;
 
 	if (obj->dma_buf) {
-		ret = drm_prime_add_buf_handle(&file_priv->prime, obj->dma_buf, args->new_handle);
+		ret = drm_prime_add_buf_handle(&file_priv->prime, obj->dma_buf,
+					       handle);
 		if (ret < 0) {
 			spin_lock(&file_priv->table_lock);
-			idr_remove(&file_priv->object_idr, args->new_handle);
+			idr_remove(&file_priv->object_idr, handle);
 			spin_unlock(&file_priv->table_lock);
 			goto out_unlock;
 		}
@@ -1012,6 +1010,8 @@ int drm_gem_change_handle_ioctl(struct drm_device *dev, void *data,
 
 out_unlock:
 	mutex_unlock(&file_priv->prime.lock);
+out:
+	drm_gem_object_put(obj);
 
 	return ret;
 }

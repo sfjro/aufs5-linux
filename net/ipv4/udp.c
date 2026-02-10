@@ -1851,6 +1851,7 @@ void skb_consume_udp(struct sock *sk, struct sk_buff *skb, int len)
 		sk_peek_offset_bwd(sk, len);
 
 	if (!skb_shared(skb)) {
+		skb_orphan(skb);
 		skb_attempt_defer_free(skb);
 		return;
 	}
@@ -2159,7 +2160,8 @@ csum_copy_err:
 	goto try_again;
 }
 
-int udp_pre_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
+int udp_pre_connect(struct sock *sk, struct sockaddr_unsized *uaddr,
+		    int addr_len)
 {
 	/* This check is replicated from __ip4_datagram_connect() and
 	 * intended to prevent BPF program called below from accessing bytes
@@ -2172,7 +2174,8 @@ int udp_pre_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 }
 EXPORT_IPV6_MOD(udp_pre_connect);
 
-static int udp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
+static int udp_connect(struct sock *sk, struct sockaddr_unsized *uaddr,
+		       int addr_len)
 {
 	int res;
 

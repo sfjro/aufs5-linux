@@ -709,7 +709,7 @@ static struct its_collection *its_build_mapd_cmd(struct its_node *its,
 						 struct its_cmd_block *cmd,
 						 struct its_cmd_desc *desc)
 {
-	unsigned long itt_addr;
+	phys_addr_t itt_addr;
 	u8 size = ilog2(desc->its_mapd_cmd.dev->nr_ites);
 
 	itt_addr = virt_to_phys(desc->its_mapd_cmd.dev->itt);
@@ -879,7 +879,7 @@ static struct its_vpe *its_build_vmapp_cmd(struct its_node *its,
 					   struct its_cmd_desc *desc)
 {
 	struct its_vpe *vpe = valid_vpe(its, desc->its_vmapp_cmd.vpe);
-	unsigned long vpt_addr, vconf_addr;
+	phys_addr_t vpt_addr, vconf_addr;
 	u64 target;
 	bool alloc;
 
@@ -2477,10 +2477,10 @@ retry_baser:
 	baser->psz = psz;
 	tmp = indirect ? GITS_LVL1_ENTRY_SIZE : esz;
 
-	pr_info("ITS@%pa: allocated %d %s @%lx (%s, esz %d, psz %dK, shr %d)\n",
+	pr_info("ITS@%pa: allocated %d %s @%llx (%s, esz %d, psz %dK, shr %d)\n",
 		&its->phys_base, (int)(PAGE_ORDER_TO_SIZE(order) / (int)tmp),
 		its_base_type_string[type],
-		(unsigned long)virt_to_phys(base),
+		(u64)virt_to_phys(base),
 		indirect ? "indirect" : "flat", (int)esz,
 		psz / SZ_1K, (int)shr >> GITS_BASER_SHAREABILITY_SHIFT);
 
@@ -4992,7 +4992,7 @@ static void its_enable_quirks(struct its_node *its)
 				     its_quirks, its);
 }
 
-static int its_save_disable(void)
+static int its_save_disable(void *data)
 {
 	struct its_node *its;
 	int err = 0;
@@ -5028,7 +5028,7 @@ err:
 	return err;
 }
 
-static void its_restore_enable(void)
+static void its_restore_enable(void *data)
 {
 	struct its_node *its;
 	int ret;
@@ -5088,9 +5088,13 @@ static void its_restore_enable(void)
 	raw_spin_unlock(&its_lock);
 }
 
-static struct syscore_ops its_syscore_ops = {
+static const struct syscore_ops its_syscore_ops = {
 	.suspend = its_save_disable,
 	.resume = its_restore_enable,
+};
+
+static struct syscore its_syscore = {
+	.ops = &its_syscore_ops,
 };
 
 static void __init __iomem *its_map_one(struct resource *res, int *err)
@@ -5864,7 +5868,7 @@ int __init its_init(struct fwnode_handle *handle, struct rdists *rdists,
 		}
 	}
 
-	register_syscore_ops(&its_syscore_ops);
+	register_syscore(&its_syscore);
 
 	return 0;
 }
