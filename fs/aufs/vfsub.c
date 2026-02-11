@@ -20,7 +20,7 @@ int vfsub_test_mntns(struct vfsmount *mnt, struct super_block *h_sb)
 	if (!au_test_fuse(h_sb) || !au_userns)
 		return 0;
 
-	return is_current_mnt_ns(mnt) ? 0 : -EACCES;
+	return our_mnt(mnt) ? 0 : -EACCES;
 }
 #endif
 
