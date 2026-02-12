@@ -9,10 +9,10 @@
 #if IS_MODULE(CONFIG_AUFS_FS)
 /*
  * This au_mf.c (aufs mmapped files) is for external AUFS module only,
- * and statically linked to kernel.
+ * and au_mf.o is statically linked to kernel.
  * See also $srctree/fs/Makefile.
- * This linking may seem to be tricky. It is due to support the case when AUFS
- * is configured as an external module, eg. VFS calls a function defined in the
+ * This linking may seem tricky. It is due to support the case when AUFS is
+ * configured as an external module, eg. VFS calls a function defined in the
  * dynamic module.
  */
 #else
