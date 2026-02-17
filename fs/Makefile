@@ -18,6 +18,12 @@ obj-y :=	open.o read_write.o file_table.o super.o \
 		kernel_read_file.o mnt_idmapping.o remap_range.o pidfs.o \
 		file_attr.o
 
+# don't move au_mf.o to the bottom of this file, otherwise it will
+# conflict with aufs-kbuild.patch.
+ifeq (${CONFIG_AUFS_FS},m)
+obj-y += au_mf.o
+endif
+
 obj-$(CONFIG_BUFFER_HEAD)	+= buffer.o mpage.o
 obj-$(CONFIG_PROC_FS)		+= proc_namespace.o
 obj-$(CONFIG_LEGACY_DIRECT_IO)	+= direct-io.o
@@ -131,6 +137,3 @@ obj-$(CONFIG_ZONEFS_FS)		+= zonefs/
 obj-$(CONFIG_BPF_LSM)		+= bpf_fs_kfuncs.o
 obj-$(CONFIG_RESCTRL_FS)	+= resctrl/
 obj-$(CONFIG_AUFS_FS)           += aufs/
-ifeq (${CONFIG_AUFS_FS},m)
-obj-y += au_mf.o
-endif
