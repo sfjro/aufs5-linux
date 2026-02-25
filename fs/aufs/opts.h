@@ -152,6 +152,8 @@ struct au_opt {
 };
 
 /* opts flags */
+#define AuOpts_REMOUNT		BIT(0)
+#define AuOpts_REFRESH		BIT(1)
 #define AuOpts_TRUNC_XIB	BIT(2)
 #define AuOpts_REFRESH_DYAOP	BIT(3)
 #define au_ftest_opts(flags, name)	((flags) & AuOpts_##name)
@@ -187,6 +189,7 @@ struct super_block;
 int au_opts_verify(struct super_block *sb, unsigned long sb_flags,
 		   unsigned int pending);
 int au_opts_mount(struct super_block *sb, struct au_opts *opts);
+int au_opts_remount(struct super_block *sb, struct au_opts *opts);
 
 unsigned int au_opt_udba(struct super_block *sb);
 

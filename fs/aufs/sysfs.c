@@ -197,3 +197,56 @@ void sysaufs_br_init(struct au_branch *br)
 		br_sysfs++;
 	}
 }
+
+void sysaufs_brs_del(struct super_block *sb, aufs_bindex_t bindex)
+{
+	struct au_branch *br;
+	struct kobject *kobj;
+	struct au_brsysfs *br_sysfs;
+	int i;
+	aufs_bindex_t bbot;
+
+	if (!sysaufs_brs)
+		return;
+
+	kobj = &au_sbi(sb)->si_kobj;
+	bbot = au_sbbot(sb);
+	for (; bindex <= bbot; bindex++) {
+		br = au_sbr(sb, bindex);
+		br_sysfs = br->br_sysfs;
+		for (i = 0; i < ARRAY_SIZE(br->br_sysfs); i++) {
+			sysfs_remove_file(kobj, &br_sysfs->attr);
+			br_sysfs++;
+		}
+	}
+}
+
+void sysaufs_brs_add(struct super_block *sb, aufs_bindex_t bindex)
+{
+	int err, i;
+	aufs_bindex_t bbot;
+	struct kobject *kobj;
+	struct au_branch *br;
+	struct au_brsysfs *br_sysfs;
+
+	if (!sysaufs_brs)
+		return;
+
+	kobj = &au_sbi(sb)->si_kobj;
+	bbot = au_sbbot(sb);
+	for (; bindex <= bbot; bindex++) {
+		br = au_sbr(sb, bindex);
+		br_sysfs = br->br_sysfs;
+		snprintf(br_sysfs[AuBrSysfs_BR].name, sizeof(br_sysfs->name),
+			 SysaufsBr_PREFIX "%d", bindex);
+		snprintf(br_sysfs[AuBrSysfs_BRID].name, sizeof(br_sysfs->name),
+			 SysaufsBrid_PREFIX "%d", bindex);
+		for (i = 0; i < ARRAY_SIZE(br->br_sysfs); i++) {
+			err = sysfs_create_file(kobj, &br_sysfs->attr);
+			if (unlikely(err))
+				pr_warn("failed %s under sysfs(%d)\n",
+					br_sysfs->name, err);
+			br_sysfs++;
+		}
+	}
+}

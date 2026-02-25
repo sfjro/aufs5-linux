@@ -1535,12 +1535,14 @@ void au_xino_clr(struct super_block *sb)
 	au_opt_clr(sbinfo->si_mntflags, XINO);
 }
 
-int au_xino_set(struct super_block *sb, struct au_opt_xino *xiopt)
+int au_xino_set(struct super_block *sb, struct au_opt_xino *xiopt, int remount)
 {
-	int err;
-	struct dentry *dentry, *parent;
+	int err, skip;
+	struct dentry *dentry, *parent, *cur_dentry, *cur_parent;
+	const struct qstr *dname, *cur_name;
+	struct file *cur_xino;
 	struct au_sbinfo *sbinfo;
-	const struct path *path;
+	const struct path *path, *cur_path;
 
 	SiMustWriteLock(sb);
 
@@ -1549,6 +1551,23 @@ int au_xino_set(struct super_block *sb, struct au_opt_xino *xiopt)
 	path = &xiopt->file->f_path;
 	dentry = path->dentry;
 	parent = dget_parent(dentry);
+	if (remount) {
+		skip = 0;
+		cur_xino = sbinfo->si_xib;
+		if (cur_xino) {
+			cur_path = &cur_xino->f_path;
+			cur_dentry = cur_path->dentry;
+			cur_parent = dget_parent(cur_dentry);
+			cur_name = &cur_dentry->d_name;
+			dname = &dentry->d_name;
+			skip = (cur_parent == parent
+				&& au_qstreq(dname, cur_name));
+			dput(cur_parent);
+		}
+		if (skip)
+			goto out;
+	}
+
 	au_opt_set(sbinfo->si_mntflags, XINO);
 	err = au_xino_set_xib(sb, path);
 	/* si_x{read,write} are set */
