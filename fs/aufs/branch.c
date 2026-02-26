@@ -7,6 +7,7 @@
  * branch management
  */
 
+#include <linux/file.h>
 #include "aufs.h"
 
 /*
@@ -14,6 +15,8 @@
  */
 static void au_br_do_free(struct au_branch *br)
 {
+	au_xino_put(br);
+
 	AuLCntZero(au_lcnt_read(&br->br_count, /*do_rev*/0));
 	au_lcnt_fin(&br->br_count, /*do_sync*/0);
 
@@ -91,6 +94,9 @@ static struct au_branch *au_br_alloc(struct super_block *sb, int new_nbranch,
 	add_branch = kzalloc(sizeof(*add_branch), GFP_NOFS);
 	if (unlikely(!add_branch))
 		goto out;
+	add_branch->br_xino = au_xino_alloc(/*nfile*/1);
+	if (unlikely(!add_branch->br_xino))
+		goto out_br;
 
 	root = sb->s_root;
 	err = au_sbr_realloc(au_sbi(sb), new_nbranch, /*may_shrink*/0);
@@ -104,8 +110,10 @@ static struct au_branch *au_br_alloc(struct super_block *sb, int new_nbranch,
 	if (!err)
 		return add_branch; /* success */
 
-	au_kfree_rcu(add_branch);
+	au_xino_put(add_branch);
 
+out_br:
+	au_kfree_rcu(add_branch);
 out:
 	return ERR_PTR(err);
 }
@@ -192,6 +200,9 @@ static int au_br_init(struct au_branch *br, struct super_block *sb,
 		      struct au_opt_add *add)
 {
 	int err;
+	struct au_branch *brbase;
+	struct file *xf;
+	struct inode *h_inode;
 
 	err = 0;
 	br->br_perm = add->perm;
@@ -200,9 +211,22 @@ static int au_br_init(struct au_branch *br, struct super_block *sb,
 	br->br_id = au_new_br_id(sb);
 	AuDebugOn(br->br_id < 0);
 
+	if (au_opt_test(au_mntflags(sb), XINO)) {
+		brbase = au_sbr(sb, 0);
+		xf = au_xino_file(brbase->br_xino, /*idx*/-1);
+		AuDebugOn(!xf);
+		h_inode = d_inode(add->path.dentry);
+		err = au_xino_init_br(sb, br, h_inode->i_ino, &xf->f_path);
+		if (unlikely(err)) {
+			AuDebugOn(au_xino_file(br->br_xino, /*idx*/-1));
+			goto out_err;
+		}
+	}
+
 	path_get(&br->br_path);
 	goto out; /* success */
 
+out_err:
 	memset(&br->br_path, 0, sizeof(br->br_path));
 out:
 	return err;

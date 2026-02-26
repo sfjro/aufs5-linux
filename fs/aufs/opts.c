@@ -7,6 +7,7 @@
  * mount options/flags
  */
 
+#include <linux/file.h>
 #include <linux/namei.h>
 #include <linux/types.h> /* a distribution requires */
 #include <linux/parser.h>
@@ -209,6 +210,27 @@ static int au_opt_br(struct super_block *sb, struct au_opt *opt,
 		}
 		break;
 	}
+	return err;
+}
+
+static int au_opt_xino(struct super_block *sb, struct au_opt *opt,
+		       struct au_opt_xino **opt_xino,
+		       struct au_opts *opts)
+{
+	int err;
+
+	err = 0;
+	switch (opt->type) {
+	case Opt_xino:
+		err = au_xino_set(sb, &opt->xino);
+		if (!err)
+			*opt_xino = &opt->xino;
+		break;
+	case Opt_noxino:
+		au_xino_clr(sb);
+		*opt_xino = (void *)-1;
+		break;
+	}
 
 	return err;
 }
@@ -219,11 +241,13 @@ int au_opts_mount(struct super_block *sb, struct au_opts *opts)
 	unsigned int tmp;
 	aufs_bindex_t bbot;
 	struct au_opt *opt;
+	struct au_opt_xino *opt_xino, xino;
 	struct au_sbinfo *sbinfo;
 
 	SiMustWriteLock(sb);
 
 	err = 0;
+	opt_xino = NULL;
 	opt = opts->opt;
 	while (err >= 0 && opt->type != Opt_tail)
 		/* re-commit later */
@@ -234,8 +258,11 @@ int au_opts_mount(struct super_block *sb, struct au_opts *opts)
 	else if (unlikely(err < 0))
 		goto out;
 
+	/* disable xino temporary */
 	sbinfo = au_sbi(sb);
 	tmp = sbinfo->si_mntflags;
+	au_opt_clr(sbinfo->si_mntflags, XINO);
+
 	opt = opts->opt;
 	while (err >= 0 && opt->type != Opt_tail)
 		err = au_opt_br(sb, opt++, opts);
@@ -250,6 +277,29 @@ int au_opts_mount(struct super_block *sb, struct au_opts *opts)
 		pr_err("no branches\n");
 		goto out;
 	}
+
+	if (au_opt_test(tmp, XINO))
+		au_opt_set(sbinfo->si_mntflags, XINO);
+	opt = opts->opt;
+	while (!err && opt->type != Opt_tail)
+		err = au_opt_xino(sb, opt++, &opt_xino, opts);
+	if (unlikely(err))
+		goto out;
+
+	/* restore xino */
+	if (au_opt_test(tmp, XINO) && !opt_xino) {
+		xino.file = au_xino_def(sb);
+		err = PTR_ERR(xino.file);
+		if (IS_ERR(xino.file))
+			goto out;
+
+		err = au_xino_set(sb, &xino);
+		fput(xino.file);
+		if (unlikely(err))
+			goto out;
+	}
+
+	bbot = au_sbbot(sb);
 
 out:
 	return err;

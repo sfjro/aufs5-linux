@@ -27,6 +27,7 @@ static void au_fsctx_dump(struct au_opts *opts)
 	/* reduce stack space */
 	union {
 		struct au_opt_add *add;
+		struct au_opt_xino *xino;
 	} u;
 	struct au_opt *opt;
 
@@ -38,6 +39,14 @@ static void au_fsctx_dump(struct au_opts *opts)
 			AuDbg("add {b%d, %s, 0x%x, %p}\n",
 				  u.add->bindex, u.add->pathname, u.add->perm,
 				  u.add->path.dentry);
+			break;
+
+		case Opt_xino:
+			u.xino = &opt->xino;
+			AuDbg("xino {%s %pD}\n", u.xino->path, u.xino->file);
+			break;
+		case Opt_noxino:
+			AuLabel(noxino);
 			break;
 
 		default:
@@ -61,6 +70,9 @@ static void au_fsctx_dump(struct au_opts *opts)
 
 const struct fs_parameter_spec aufs_fsctx_paramspec[] = {
 	fsparam_string("br", Opt_br),
+
+	fsparam_path("xino", Opt_xino),
+	fsparam_flag("noxino", Opt_noxino),
 
 	/* internal use for the scripts */
 	fsparam_string("si", Opt_ignore_silent),
@@ -157,6 +169,39 @@ out:
 	return err;
 }
 
+static int au_fsctx_parse_xino(struct fs_context *fc,
+			       struct au_opt_xino *xino,
+			       struct fs_parameter *param)
+{
+	int err;
+	struct au_fsctx_opts *a = fc->fs_private;
+
+	err = -ENOMEM;
+	/* will be freed by au_opts_free() */
+	xino->path = kmemdup_nul(param->string, param->size, GFP_NOFS);
+	if (unlikely(!xino->path))
+		goto out;
+	AuDbg("path %s\n", xino->path);
+
+	xino->file = au_xino_create(a->sb, xino->path, /*silent*/0,
+				    /*wbrtop*/0);
+	err = PTR_ERR(xino->file);
+	if (IS_ERR(xino->file)) {
+		xino->file = NULL;
+		goto out;
+	}
+
+	err = 0;
+	if (unlikely(a->sb && xino->file->f_path.dentry->d_sb == a->sb)) {
+		err = -EINVAL;
+		errorfc(fc, "%s must be outside", xino->path);
+	}
+
+out:
+	AuTraceErr(err);
+	return err;
+}
+
 static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *param)
 {
 	int err, token;
@@ -181,6 +226,14 @@ static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *para
 		break;
 	case Opt_add:
 		err = au_fsctx_parse_add(fc, param->string);
+		break;
+
+	case Opt_xino:
+		err = au_fsctx_parse_xino(fc, &opt->xino, param);
+		break;
+
+	case Opt_noxino:
+		err = 0;
 		break;
 
 	case Opt_ignore:
@@ -277,6 +330,10 @@ static void au_fsctx_opts_free(struct au_opts *opts)
 		case Opt_add:
 			kfree(opt->add.pathname);
 			path_put(&opt->add.path);
+			break;
+		case Opt_xino:
+			kfree(opt->xino.path);
+			fput(opt->xino.file);
 			break;
 		/* add more later */
 		}
