@@ -119,6 +119,9 @@ struct au_sbinfo {
 	atomic_t		si_xigen_next;
 #endif
 
+	/* dirty trick to support atomic_open */
+	struct hlist_bl_head	si_aopen;
+
 	/* vdir parameters */
 	unsigned long		si_rdcache;	/* max cache time in jiffies */
 	unsigned int		si_rdblk;	/* deblk size */
