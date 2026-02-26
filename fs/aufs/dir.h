@@ -98,5 +98,24 @@ void au_vdir_free(struct au_vdir *vdir);
 int au_vdir_init(struct file *file);
 int au_vdir_fill_de(struct file *file, struct dir_context *ctx);
 
+/* ioctl.c */
+long aufs_ioctl_dir(struct file *file, unsigned int cmd, unsigned long arg);
+
+#ifdef CONFIG_AUFS_RDU
+/* rdu.c */
+long au_rdu_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+#ifdef CONFIG_COMPAT
+long au_rdu_compat_ioctl(struct file *file, unsigned int cmd,
+			 unsigned long arg);
+#endif
+#else
+AuStub(long, au_rdu_ioctl, return -EINVAL, struct file *file,
+       unsigned int cmd, unsigned long arg)
+#ifdef CONFIG_COMPAT
+AuStub(long, au_rdu_compat_ioctl, return -EINVAL, struct file *file,
+       unsigned int cmd, unsigned long arg)
+#endif
+#endif
+
 #endif /* __KERNEL__ */
 #endif /* __AUFS_DIR_H__ */
