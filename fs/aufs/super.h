@@ -130,6 +130,9 @@ struct au_sbinfo {
 	spinlock_t		si_plink_maint_lock;
 	pid_t			si_plink_maint_pid;
 
+	/* with/without getattr, brother of sb->s_d_op */
+	const struct inode_operations *si_iop_array;
+
 	/*
 	 * sysfs and lifetime management.
 	 * this is not a small structure and it may be a waste of memory in case
@@ -208,7 +211,7 @@ void *au_array_alloc(unsigned long long *hint, au_arraycb_t cb,
 struct inode **au_iarray_alloc(struct super_block *sb, unsigned long long *max);
 void au_iarray_free(struct inode **a, unsigned long long max);
 
-void au_remount_refresh(struct super_block *sb, unsigned int do_dop);
+void au_remount_refresh(struct super_block *sb, unsigned int do_idop);
 extern const struct super_operations aufs_sop;
 int au_alloc_root(struct super_block *sb);
 extern struct file_system_type aufs_fs_type;

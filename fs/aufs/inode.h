@@ -138,6 +138,7 @@ static inline void au_nlink_unlock(struct inode *inode)
 
 /* inode.c */
 struct inode *au_igrab(struct inode *inode);
+void au_refresh_iop(struct inode *inode, int force_getattr);
 int au_refresh_hinode_self(struct inode *inode);
 int au_refresh_hinode(struct inode *inode, struct dentry *dentry);
 int au_ino(struct super_block *sb, aufs_bindex_t bindex, ino_t h_ino,
@@ -157,7 +158,8 @@ enum {
 	AuIop_OTHER,
 	AuIop_Last
 };
-extern struct inode_operations aufs_iop[AuIop_Last]; /* not const */
+extern struct inode_operations aufs_iop[AuIop_Last], /* not const */
+	aufs_iop_nogetattr[AuIop_Last];
 
 /* au_wr_dir flags */
 #define AuWrDir_ADD_ENTRY	BIT(0)
@@ -184,6 +186,29 @@ int au_pin(struct au_pin *pin, struct dentry *dentry, aufs_bindex_t bindex,
 	   unsigned int udba, unsigned char flags) __must_check;
 int au_do_pin(struct au_pin *pin) __must_check;
 void au_unpin(struct au_pin *pin);
+int au_reval_for_attr(struct dentry *dentry, unsigned int sigen);
+
+#define AuIcpup_DID_CPUP	1
+#define au_ftest_icpup(flags, name)	((flags) & AuIcpup_##name)
+#define au_fset_icpup(flags, name) \
+	do { (flags) |= AuIcpup_##name; } while (0)
+#define au_fclr_icpup(flags, name) \
+	do { (flags) &= ~AuIcpup_##name; } while (0)
+
+struct au_icpup_args {
+	unsigned char flags;
+	unsigned char pin_flags;
+	aufs_bindex_t btgt;
+	unsigned int udba;
+	struct au_pin pin;
+	struct path h_path;
+	struct inode *h_inode;
+};
+
+int au_pin_and_icpup(struct dentry *dentry, struct iattr *ia,
+		     struct au_icpup_args *a);
+
+int au_h_path_getattr(struct dentry *dentry, int force, struct path *h_path);
 
 /* i_op_add.c */
 int au_may_add(struct dentry *dentry, aufs_bindex_t bindex,

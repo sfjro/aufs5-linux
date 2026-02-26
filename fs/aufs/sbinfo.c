@@ -87,6 +87,9 @@ struct au_sbinfo *au_si_alloc(struct super_block *sb)
 	init_waitqueue_head(&sbinfo->si_plink_wq);
 	spin_lock_init(&sbinfo->si_plink_maint_lock);
 
+	/* with getattr by default */
+	sbinfo->si_iop_array = aufs_iop;
+
 	/* leave other members for sysaufs and si_mnt. */
 	sbinfo->si_sb = sb;
 	if (sb) {
