@@ -52,7 +52,9 @@ struct inode *au_iget_locked(struct super_block *sb, ino_t ino)
 	if (!(inode_state_read_once(inode) & I_NEW))
 		goto out;
 
-	err = au_iinfo_init(inode);
+	err = au_xigen_new(inode);
+	if (!err)
+		err = au_iinfo_init(inode);
 	if (!err)
 		inode_inc_iversion(inode);
 	else {

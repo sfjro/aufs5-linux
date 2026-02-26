@@ -190,7 +190,7 @@ int au_do_pin(struct au_pin *p)
 
 out_err:
 	pr_err("err %d\n", err);
-	err = -EBUSY;
+	err = au_busy_or_stale();
 out:
 	return err;
 }
