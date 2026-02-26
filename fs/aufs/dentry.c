@@ -110,7 +110,7 @@ int au_lkup_dentry(struct dentry *dentry, aufs_bindex_t btop,
 {
 	int npositive, err;
 	aufs_bindex_t bindex, btail, bdiropq;
-	unsigned char isdir;
+	unsigned char isdir, dirperm1;
 	struct au_do_lookup_args args = {
 		.flags		= flags,
 		.name		= &dentry->d_name
@@ -124,6 +124,7 @@ int au_lkup_dentry(struct dentry *dentry, aufs_bindex_t btop,
 		goto out;
 
 	isdir = !!d_is_dir(dentry);
+	dirperm1 = !!au_opt_test(au_mntflags(sb), DIRPERM1);
 
 	npositive = 0;
 	parent = dget_parent(dentry);
@@ -151,6 +152,8 @@ int au_lkup_dentry(struct dentry *dentry, aufs_bindex_t btop,
 			goto out_parent;
 		if (h_dentry)
 			au_fclr_lkup(args.flags, ALLOW_NEG);
+		if (dirperm1)
+			au_fset_lkup(args.flags, IGNORE_PERM);
 
 		if (au_dbwh(dentry) == bindex)
 			break;

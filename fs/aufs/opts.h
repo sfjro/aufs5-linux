@@ -20,7 +20,7 @@ enum {
 	Opt_br,
 	Opt_add, Opt_del, Opt_mod, Opt_append, Opt_prepend,
 	Opt_idel, Opt_imod,
-	Opt_rdcache, Opt_rdblk, Opt_rdhash,
+	Opt_dirwh, Opt_rdcache, Opt_rdblk, Opt_rdhash,
 	Opt_xino, Opt_noxino,
 	Opt_trunc_xino, Opt_trunc_xino_v,
 	Opt_trunc_xino_path, Opt_itrunc_xino,
@@ -30,6 +30,8 @@ enum {
 	Opt_dio,
 	Opt_wbr_copyup, Opt_wbr_create,
 	Opt_verbose, Opt_noverbose,
+	Opt_sum, Opt_wsum,
+	Opt_dirperm1,
 	Opt_acl,
 	Opt_tail, Opt_ignore, Opt_ignore_silent, Opt_err
 };
@@ -44,17 +46,27 @@ enum {
 #define AuOpt_UDBA_REVAL	BIT(3)
 #define AuOpt_UDBA_HNOTIFY	BIT(4)
 #define AuOpt_PLINK		BIT(6)		/* pseudo-link */
+#define AuOpt_DIRPERM1		BIT(7)		/* ignore the lower dir's perm
+						   bits */
+#define AuOpt_SUM		BIT(9)		/* summation for statfs(2) */
+#define AuOpt_SUM_W		BIT(10)		/* unimplemented */
 #define AuOpt_VERBOSE		BIT(12)		/* print the cause of error */
 #define AuOpt_DIO		BIT(13)		/* direct io */
+#define AuOpt_DIRREN		BIT(14)		/* directory rename */
 
 #ifndef CONFIG_AUFS_HNOTIFY
 #undef AuOpt_UDBA_HNOTIFY
 #define AuOpt_UDBA_HNOTIFY	0
 #endif
+#ifndef CONFIG_AUFS_DIRREN
+#undef AuOpt_DIRREN
+#define AuOpt_DIRREN		0
+#endif
 
 #define AuOpt_Def	(AuOpt_XINO \
 			 | AuOpt_UDBA_REVAL \
 			 | AuOpt_PLINK \
+			 /* | AuOpt_DIRPERM1 */ \
 			 | AuOpt_DIO)
 #define AuOptMask_UDBA	(AuOpt_UDBA_NONE \
 			 | AuOpt_UDBA_REVAL \
@@ -157,6 +169,7 @@ struct au_opt {
 		struct au_opt_add	add;
 		struct au_opt_del	del;
 		struct au_opt_mod	mod;
+		int			dirwh;
 		int			rdcache;
 		unsigned int		rdblk;
 		unsigned int		rdhash;
