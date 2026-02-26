@@ -58,6 +58,9 @@ typedef int16_t aufs_bindex_t;
 
 #define AUFS_FSTYPE		AUFS_NAME
 
+#define AUFS_ROOT_INO		2
+#define AUFS_FIRST_INO		11
+
 #define AUFS_WKQ_NAME		AUFS_NAME "d"
 
 /* branch permissions and attributes */

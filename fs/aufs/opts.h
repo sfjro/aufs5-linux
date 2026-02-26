@@ -23,7 +23,21 @@ enum {
 
 /* ---------------------------------------------------------------------- */
 
+/* mount flags */
+#define AuOpt_XINO		BIT(0)		/* external inode number bitmap
+						   and translation table */
+
+#define AuOpt_Def	AuOpt_XINO
+
 #define AuOpt_LkupDirFlags	(LOOKUP_FOLLOW | LOOKUP_DIRECTORY)
+
+#define au_opt_test(flags, name)	(flags & AuOpt_##name)
+#define au_opt_set(flags, name) do { \
+	((flags) |= AuOpt_##name); \
+} while (0)
+#define au_opt_clr(flags, name) do { \
+	((flags) &= ~AuOpt_##name); \
+} while (0)
 
 /* ---------------------------------------------------------------------- */
 
