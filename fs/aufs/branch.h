@@ -72,6 +72,7 @@ struct au_branch {
 
 	int			br_perm;
 	struct path		br_path;
+	au_lcnt_t		br_nfiles;	/* opened files */
 	au_lcnt_t		br_count;	/* in-use for other */
 
 	struct au_wbr		*br_wbr;
@@ -102,6 +103,25 @@ static inline struct mnt_idmap *au_br_idmap(struct au_branch *br)
 static inline struct super_block *au_br_sb(struct au_branch *br)
 {
 	return au_br_mnt(br)->mnt_sb;
+}
+
+static inline int au_br_rdonly(struct au_branch *br)
+{
+	return (sb_rdonly(au_br_sb(br))
+		|| !au_br_writable(br->br_perm))
+		? -EROFS : 0;
+}
+
+static inline int au_br_test_oflag(int oflag, struct au_branch *br)
+{
+	int err, exec_flag;
+
+	err = 0;
+	exec_flag = oflag & __FMODE_EXEC;
+	if (unlikely(exec_flag && path_noexec(&br->br_path)))
+		err = -EACCES;
+
+	return err;
 }
 
 static inline void au_xino_get(struct au_branch *br)
