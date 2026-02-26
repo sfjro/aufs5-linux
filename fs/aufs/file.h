@@ -61,6 +61,9 @@ struct au_do_open_args {
 	/* add more later */
 };
 int au_do_open(struct file *file, struct au_do_open_args *args);
+int au_reopen_nondir(struct file *file);
+struct au_pin;
+int au_ready_to_write(struct file *file, loff_t len, struct au_pin *pin);
 int au_reval_and_lock_fdi(struct file *file, int (*reopen)(struct file *file),
 			  int wlock, unsigned int fi_lsc);
 
