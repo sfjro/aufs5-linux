@@ -930,7 +930,7 @@ static int warn_unsupported(struct file *file, const char *op)
 /*
  * Attempt to initiate a splice from pipe to file.
  */
-static ssize_t do_splice_from(struct pipe_inode_info *pipe, struct file *out,
+ssize_t do_splice_from(struct pipe_inode_info *pipe, struct file *out,
 			      loff_t *ppos, size_t len, unsigned int flags)
 {
 	if (unlikely(!out->f_op->splice_write))
