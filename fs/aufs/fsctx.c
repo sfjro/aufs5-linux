@@ -58,6 +58,7 @@ static void au_fsctx_dump(struct au_opts *opts)
 		/* simple true/false flag */
 		au_fsctx_TF(trunc_xino);
 		au_fsctx_TF(trunc_xib);
+		au_fsctx_TF(plink);
 #undef au_fsctx_TF
 
 		case Opt_trunc_xino_path:
@@ -68,6 +69,10 @@ static void au_fsctx_dump(struct au_opts *opts)
 			break;
 		case Opt_noxino:
 			AuLabel(noxino);
+			break;
+
+		case Opt_list_plink:
+			AuLabel(list_plink);
 			break;
 
 		default:
@@ -101,6 +106,16 @@ const struct fs_parameter_spec aufs_fsctx_paramspec[] = {
 	fsparam_s32("itrunc_xino", Opt_itrunc_xino),
 	/* fsparam_path("zxino", Opt_zxino), */
 	fsparam_flag_no("trunc_xib", Opt_trunc_xib),
+
+#ifdef CONFIG_PROC_FS
+	fsparam_flag_no("plink", Opt_plink),
+#else
+	au_ignore_flag("plink", Opt_ignore),
+#endif
+
+#ifdef CONFIG_AUFS_DEBUG
+	fsparam_flag("list_plink", Opt_list_plink),
+#endif
 
 	/* internal use for the scripts */
 	fsparam_string("si", Opt_ignore_silent),
@@ -366,9 +381,12 @@ static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *para
 			break
 	au_fsctx_TF(trunc_xino);
 	au_fsctx_TF(trunc_xib);
+	au_fsctx_TF(plink);
 #undef au_fsctx_TF
 
 	case Opt_noxino:
+		fallthrough;
+	case Opt_list_plink:
 		err = 0;
 		break;
 

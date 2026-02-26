@@ -20,6 +20,9 @@ struct mnt_idmap;
 int au_wh_test(struct mnt_idmap *h_idmap, struct path *h_ppath,
 	       const struct qstr *wh_name, int try_sio);
 struct dentry;
+struct inode;
+int au_wh_unlink_dentry(struct inode *h_dir, struct path *h_path,
+			struct dentry *dentry);
 struct au_branch;
 struct dentry *au_wh_lkup(struct dentry *h_parent, const struct qstr *base_name,
 			  struct au_branch *br);

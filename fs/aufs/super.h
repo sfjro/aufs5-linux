@@ -17,6 +17,12 @@
 #include "rwsem.h"
 #include "wkq.h"
 
+#define AuPlink_NHASH 100
+static inline int au_plink_hash(ino_t ino)
+{
+	return ino % AuPlink_NHASH;
+}
+
 struct au_branch;
 struct au_sbinfo {
 	/* nowait tasks in the system-wide workqueue */
@@ -56,6 +62,12 @@ struct au_sbinfo {
 	/* reserved for future use */
 	/* unsigned long long	si_xib_limit; */	/* Max xib file size */
 
+	/* pseudo_link list */
+	struct hlist_bl_head	si_plink[AuPlink_NHASH];
+	wait_queue_head_t	si_plink_wq;
+	spinlock_t		si_plink_maint_lock;
+	pid_t			si_plink_maint_pid;
+
 	/*
 	 * sysfs and lifetime management.
 	 * this is not a small structure and it may be a waste of memory in case
@@ -79,6 +91,8 @@ struct au_sbinfo {
 #define AuLock_IR		BIT(1)		/* read-lock inode */
 #define AuLock_IW		BIT(2)		/* write-lock inode */
 #define AuLock_FLUSH		BIT(3)		/* wait for 'nowait' tasks */
+#define AuLock_NOPLM		BIT(5)		/* return err in plm mode */
+#define AuLock_NOPLMW		BIT(6)		/* wait for plm mode ends */
 #define au_ftest_lock(flags, name)	((flags) & AuLock_##name)
 #define au_fset_lock(flags, name) \
 	do { (flags) |= AuLock_##name; } while (0)
@@ -174,6 +188,33 @@ AuStubVoid(au_sbilist_del, struct super_block *sb)
 
 /* ---------------------------------------------------------------------- */
 
+/* current->atomic_flags */
+/* this value should never corrupt the ones defined in linux/sched.h */
+#define PFA_AUFS	0x10
+
+TASK_PFA_TEST(AUFS, test_aufs)	/* task_test_aufs */
+TASK_PFA_SET(AUFS, aufs)	/* task_set_aufs */
+TASK_PFA_CLEAR(AUFS, aufs)	/* task_clear_aufs */
+
+static inline int si_pid_test(struct super_block *sb)
+{
+	return !!task_test_aufs(current);
+}
+
+static inline void si_pid_clr(struct super_block *sb)
+{
+	AuDebugOn(!task_test_aufs(current));
+	task_clear_aufs(current);
+}
+
+static inline void si_pid_set(struct super_block *sb)
+{
+	AuDebugOn(task_test_aufs(current));
+	task_set_aufs(current);
+}
+
+/* ---------------------------------------------------------------------- */
+
 /* lock superblock. mainly for entry point functions */
 #define __si_read_lock(sb)	au_rw_read_lock(&au_sbi(sb)->si_rwsem)
 #define __si_write_lock(sb)	au_rw_write_lock(&au_sbi(sb)->si_rwsem)
@@ -197,23 +238,33 @@ AuStubVoid(au_sbilist_del, struct super_block *sb)
 static inline void si_noflush_read_lock(struct super_block *sb)
 {
 	__si_read_lock(sb);
-	/* re-commit later */
+	si_pid_set(sb);
 }
 
 static inline int si_noflush_read_trylock(struct super_block *sb)
 {
-	return __si_read_trylock(sb);	/* re-commit later */
+	int locked;
+
+	locked = __si_read_trylock(sb);
+	if (locked)
+		si_pid_set(sb);
+	return locked;
 }
 
 static inline void si_noflush_write_lock(struct super_block *sb)
 {
 	__si_write_lock(sb);
-	/* re-commit later */
+	si_pid_set(sb);
 }
 
 static inline int si_noflush_write_trylock(struct super_block *sb)
 {
-	return __si_write_trylock(sb);	/* re-commit later */
+	int locked;
+
+	locked = __si_write_trylock(sb);
+	if (locked)
+		si_pid_set(sb);
+	return locked;
 }
 
 #if 0 /* reserved */
@@ -227,7 +278,7 @@ static inline int si_read_trylock(struct super_block *sb, int flags)
 
 static inline void si_read_unlock(struct super_block *sb)
 {
-	/* re-commit later */
+	si_pid_clr(sb);
 	__si_read_unlock(sb);
 }
 
@@ -242,7 +293,7 @@ static inline int si_write_trylock(struct super_block *sb, int flags)
 
 static inline void si_write_unlock(struct super_block *sb)
 {
-	/* re-commit later */
+	si_pid_clr(sb);
 	__si_write_unlock(sb);
 }
 

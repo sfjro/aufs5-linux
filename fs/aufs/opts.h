@@ -23,6 +23,7 @@ enum {
 	Opt_trunc_xino, Opt_trunc_xino_v,
 	Opt_trunc_xino_path, Opt_itrunc_xino,
 	Opt_trunc_xib,
+	Opt_plink, Opt_list_plink,
 	Opt_tail, Opt_ignore, Opt_ignore_silent, Opt_err
 };
 
@@ -32,8 +33,10 @@ enum {
 #define AuOpt_XINO		BIT(0)		/* external inode number bitmap
 						   and translation table */
 #define AuOpt_TRUNC_XINO	BIT(1)		/* truncate xino files */
+#define AuOpt_PLINK		BIT(6)		/* pseudo-link */
 
-#define AuOpt_Def	AuOpt_XINO
+#define AuOpt_Def	(AuOpt_XINO \
+			 | AuOpt_PLINK)
 
 #define AuOpt_LkupDirFlags	(LOOKUP_FOLLOW | LOOKUP_DIRECTORY)
 
@@ -44,6 +47,15 @@ enum {
 #define au_opt_clr(flags, name) do { \
 	((flags) &= ~AuOpt_##name); \
 } while (0)
+
+static inline unsigned int au_opts_plink(unsigned int mntflags)
+{
+#ifdef CONFIG_PROC_FS
+	return mntflags;
+#else
+	return mntflags & ~AuOpt_PLINK;
+#endif
+}
 
 /* ---------------------------------------------------------------------- */
 

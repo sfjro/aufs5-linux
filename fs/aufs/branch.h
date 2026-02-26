@@ -14,6 +14,7 @@
 
 #include <linux/mount.h>
 #include "lcnt.h"
+#include "rwsem.h"
 #include "super.h"
 
 /* ---------------------------------------------------------------------- */
@@ -40,6 +41,17 @@ struct au_xino {
 	struct kref		xi_kref;
 };
 
+/* members for writable branch only */
+enum {AuBrWh_BASE, AuBrWh_PLINK, AuBrWh_ORPH, AuBrWh_Last};
+struct au_wbr {
+	struct au_rwsem		wbr_wh_rwsem;
+	struct dentry		*wbr_wh[AuBrWh_Last];
+	atomic_t		wbr_wh_running;
+#define wbr_whbase		wbr_wh[AuBrWh_BASE]	/* whiteout base */
+#define wbr_plink		wbr_wh[AuBrWh_PLINK]	/* pseudo-link dir */
+#define wbr_orph		wbr_wh[AuBrWh_ORPH]	/* dir for orphans */
+};
+
 /* sysfs entries */
 struct au_brsysfs {
 	char			name[16];
@@ -61,6 +73,8 @@ struct au_branch {
 	int			br_perm;
 	struct path		br_path;
 	au_lcnt_t		br_count;	/* in-use for other */
+
+	struct au_wbr		*br_wbr;
 
 #ifdef CONFIG_SYSFS
 	/* entries under sysfs per mount-point */
@@ -196,6 +210,32 @@ static inline int au_sbr_perm(struct super_block *sb, aufs_bindex_t bindex)
 {
 	return au_sbr(sb, bindex)->br_perm;
 }
+
+static inline int au_sbr_whable(struct super_block *sb, aufs_bindex_t bindex)
+{
+	return au_br_whable(au_sbr_perm(sb, bindex));
+}
+
+/* ---------------------------------------------------------------------- */
+
+#define wbr_wh_read_lock(wbr)	au_rw_read_lock(&(wbr)->wbr_wh_rwsem)
+#define wbr_wh_write_lock(wbr)	au_rw_write_lock(&(wbr)->wbr_wh_rwsem)
+#define wbr_wh_read_trylock(wbr)	au_rw_read_trylock(&(wbr)->wbr_wh_rwsem)
+#define wbr_wh_write_trylock(wbr) au_rw_write_trylock(&(wbr)->wbr_wh_rwsem)
+/*
+#define wbr_wh_read_trylock_nested(wbr) \
+	au_rw_read_trylock_nested(&(wbr)->wbr_wh_rwsem)
+#define wbr_wh_write_trylock_nested(wbr) \
+	au_rw_write_trylock_nested(&(wbr)->wbr_wh_rwsem)
+*/
+
+#define wbr_wh_read_unlock(wbr)	au_rw_read_unlock(&(wbr)->wbr_wh_rwsem)
+#define wbr_wh_write_unlock(wbr)	au_rw_write_unlock(&(wbr)->wbr_wh_rwsem)
+#define wbr_wh_downgrade_lock(wbr)	au_rw_dgrade_lock(&(wbr)->wbr_wh_rwsem)
+
+#define WbrWhMustNoWaiters(wbr)	AuRwMustNoWaiters(&(wbr)->wbr_wh_rwsem)
+#define WbrWhMustAnyLock(wbr)	AuRwMustAnyLock(&(wbr)->wbr_wh_rwsem)
+#define WbrWhMustWriteLock(wbr)	AuRwMustWriteLock(&(wbr)->wbr_wh_rwsem)
 
 #endif /* __KERNEL__ */
 #endif /* __AUFS_BRANCH_H__ */

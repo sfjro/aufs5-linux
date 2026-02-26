@@ -40,6 +40,7 @@ struct au_icntnr {
 	struct au_iinfo		iinfo;
 	struct inode		vfs_inode;
 	spinlock_t		nlink_spin; /* protects vfs_inode.i_nlink */
+	struct hlist_bl_node	plink;
 	struct rcu_head		rcu;
 } ____cacheline_aligned_in_smp;
 
@@ -97,6 +98,37 @@ void au_hinode_init(struct au_hinode *hinode);
 int au_iinfo_init(struct inode *inode);
 void au_iinfo_fin(struct inode *inode);
 int au_hinode_realloc(struct au_iinfo *iinfo, int nbr, int may_shrink);
+
+#ifdef CONFIG_PROC_FS
+/* plink.c */
+int au_plink_maint(struct super_block *sb, int flags);
+struct au_sbinfo;
+void au_plink_maint_leave(struct au_sbinfo *sbinfo);
+int au_plink_maint_enter(struct super_block *sb);
+#ifdef CONFIG_AUFS_DEBUG
+void au_plink_list(struct super_block *sb);
+#else
+AuStubVoid(au_plink_list, struct super_block *sb)
+#endif
+int au_plink_test(struct inode *inode);
+struct dentry *au_plink_lkup(struct inode *inode, aufs_bindex_t bindex);
+void au_plink_append(struct inode *inode, aufs_bindex_t bindex,
+		     struct dentry *h_dentry);
+void au_plink_put(struct super_block *sb, int verbose);
+void au_plink_clean(struct super_block *sb, int verbose);
+#else
+AuStubInt0(au_plink_maint, struct super_block *sb, int flags);
+AuStubVoid(au_plink_maint_leave, struct au_sbinfo *sbinfo);
+AuStubInt0(au_plink_maint_enter, struct super_block *sb);
+AuStubVoid(au_plink_list, struct super_block *sb);
+AuStubInt0(au_plink_test, struct inode *inode);
+AuStub(struct dentry *, au_plink_lkup, return NULL,
+       struct inode *inode, aufs_bindex_t bindex);
+AuStubVoid(au_plink_append, struct inode *inode, aufs_bindex_t bindex,
+	   struct dentry *h_dentry);
+AuStubVoid(au_plink_put, struct super_block *sb, int verbose);
+AuStubVoid(au_plink_clean, struct super_block *sb, int verbose);
+#endif /* CONFIG_PROC_FS */
 
 /* ---------------------------------------------------------------------- */
 
