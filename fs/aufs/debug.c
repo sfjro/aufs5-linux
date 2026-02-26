@@ -374,7 +374,10 @@ void __au_dbg_verify_dinode(struct dentry *dentry, const char *func, int line)
 			AuDbgDentry(dentry);
 			AuDbgInode(inode);
 			au_debug_off();
-			BUG();
+			if (au_test_fuse(h_inode->i_sb))
+				WARN_ON_ONCE(1);
+			else
+				BUG();
 		}
 	}
 }

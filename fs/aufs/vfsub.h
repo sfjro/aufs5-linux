@@ -102,10 +102,17 @@ static inline int vfsub_native_ro(struct inode *inode)
 		|| IS_IMMUTABLE(inode);
 }
 
+#ifdef CONFIG_AUFS_BR_FUSE
+int vfsub_test_mntns(struct vfsmount *mnt, struct super_block *h_sb);
+#else
+AuStubInt0(vfsub_test_mntns, struct vfsmount *mnt, struct super_block *h_sb);
+#endif
+
 int vfsub_sync_filesystem(struct super_block *h_sb);
 
 /* ---------------------------------------------------------------------- */
 
+int vfsub_update_h_iattr(const struct path *h_path, int *did);
 struct file *vfsub_dentry_open(struct path *path, int flags);
 struct file *vfsub_filp_open(const char *path, int oflags, int mode);
 struct au_branch;
@@ -251,6 +258,7 @@ static inline void vfsub_touch_atime(struct vfsmount *h_mnt,
 		.mnt	= h_mnt
 	};
 	touch_atime(&h_path);
+	vfsub_update_h_iattr(&h_path, /*did*/NULL); /*ignore*/
 }
 #endif
 

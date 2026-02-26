@@ -17,7 +17,7 @@ int au_do_open_nondir(struct file *file, int flags, struct file *h_file)
 {
 	int err;
 	aufs_bindex_t bindex;
-	struct dentry *dentry;
+	struct dentry *dentry, *h_dentry;
 	struct au_finfo *finfo;
 	struct inode *h_inode;
 
@@ -30,33 +30,44 @@ int au_do_open_nondir(struct file *file, int flags, struct file *h_file)
 	memset(&finfo->fi_htop, 0, sizeof(finfo->fi_htop));
 	atomic_set(&finfo->fi_mmapped, 0);
 	bindex = au_dbtop(dentry);
-	if (!h_file)
+	if (!h_file) {
+		h_dentry = au_h_dptr(dentry, bindex);
+		err = vfsub_test_mntns(file->f_path.mnt, h_dentry->d_sb);
+		if (unlikely(err))
+			goto out;
 		h_file = au_h_open(dentry, bindex, flags, file, /*force_wr*/0);
-	else
-		get_file(h_file);
-	if (IS_ERR(h_file))
-		err = PTR_ERR(h_file);
-	else {
-		if (flags & __O_TMPFILE) {
-			AuDebugOn(!h_file);
-			AuDebugOn(h_file != au_di(dentry)->di_htmpfile);
-			au_di(dentry)->di_htmpfile = NULL;
-
-			if (!(flags & O_EXCL)) {
-				h_inode = file_inode(h_file);
-				spin_lock(&h_inode->i_lock);
-				inode_state_set(h_inode, I_LINKABLE);
-				spin_unlock(&h_inode->i_lock);
-			}
+		if (IS_ERR(h_file)) {
+			err = PTR_ERR(h_file);
+			goto out;
 		}
-		au_set_fbtop(file, bindex);
-		au_set_h_fptr(file, bindex, h_file);
-		au_update_figen(file);
-		file->f_mode |= h_file->f_mode & FMODE_CAN_ODIRECT;
-		/* todo: necessary? */
-		/* file->f_ra = h_file->f_ra; */
+	} else {
+		h_dentry = h_file->f_path.dentry;
+		err = vfsub_test_mntns(file->f_path.mnt, h_dentry->d_sb);
+		if (unlikely(err))
+			goto out;
+		/* br ref is already inc-ed */
 	}
 
+	if (flags & __O_TMPFILE) {
+		AuDebugOn(!h_file);
+		AuDebugOn(h_file != au_di(dentry)->di_htmpfile);
+		au_di(dentry)->di_htmpfile = NULL;
+
+		if (!(flags & O_EXCL)) {
+			h_inode = file_inode(h_file);
+			spin_lock(&h_inode->i_lock);
+			inode_state_set(h_inode, I_LINKABLE);
+			spin_unlock(&h_inode->i_lock);
+		}
+	}
+	au_set_fbtop(file, bindex);
+	au_set_h_fptr(file, bindex, h_file);
+	au_update_figen(file);
+	file->f_mode |= h_file->f_mode & FMODE_CAN_ODIRECT;
+	/* todo: necessary? */
+	/* file->f_ra = h_file->f_ra; */
+
+out:
 	return err;
 }
 
@@ -742,6 +753,9 @@ const struct file_operations aufs_file_fop = {
 	.read_iter	= aufs_read_iter,
 	.write_iter	= aufs_write_iter,
 
+#ifdef CONFIG_AUFS_POLL
+	.poll		= aufs_poll,
+#endif
 	.unlocked_ioctl	= aufs_ioctl_nondir,
 #ifdef CONFIG_COMPAT
 	.compat_ioctl	= aufs_compat_ioctl_nondir,
