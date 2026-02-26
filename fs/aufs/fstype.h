@@ -216,6 +216,15 @@ static inline int au_test_nilfs(struct super_block *sb __maybe_unused)
 #endif
 }
 
+static inline int au_test_hfsplus(struct super_block *sb __maybe_unused)
+{
+#if IS_ENABLED(CONFIG_HFSPLUS_FS)
+	return sb->s_magic == HFSPLUS_SUPER_MAGIC;
+#else
+	return 0;
+#endif
+}
+
 static inline int au_test_f2fs(struct super_block *sb __maybe_unused)
 {
 #if IS_ENABLED(CONFIG_F2FS_FS)
@@ -265,6 +274,7 @@ static inline int au_test_fs_bad_iattr_size(struct super_block *sb)
 	return au_test_xfs(sb)
 		|| au_test_btrfs(sb)
 		|| au_test_ubifs(sb)
+		|| au_test_hfsplus(sb)	/* maintained, but incorrect */
 		/* || au_test_minix(sb) */	/* untested */
 		;
 }
@@ -285,7 +295,8 @@ static inline int au_test_fs_bad_iattr(struct super_block *sb)
 static inline int au_test_fs_no_limit_nlink(struct super_block *sb)
 {
 	return au_test_tmpfs(sb)
-		|| au_test_ubifs(sb);
+		|| au_test_ubifs(sb)
+		|| au_test_hfsplus(sb);
 }
 
 /*
