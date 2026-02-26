@@ -63,9 +63,11 @@ unsigned int au_file_roflags(unsigned int flags);
 struct file *au_h_open(struct dentry *dentry, aufs_bindex_t bindex, int flags,
 		       struct file *file);
 struct au_do_open_args {
-	int		(*open)(struct file *file, int flags);
+	int		aopen;
+	int		(*open)(struct file *file, int flags,
+				struct file *h_file);
 	struct au_fidir	*fidir;
-	/* add more later */
+	struct file	*h_file;
 };
 int au_do_open(struct file *file, struct au_do_open_args *args);
 int au_reopen_nondir(struct file *file);
@@ -73,11 +75,14 @@ struct au_pin;
 int au_ready_to_write(struct file *file, loff_t len, struct au_pin *pin);
 int au_reval_and_lock_fdi(struct file *file, int (*reopen)(struct file *file),
 			  int wlock, unsigned int fi_lsc);
+int au_do_flush(struct file *file, fl_owner_t id,
+		int (*flush)(struct file *file, fl_owner_t id));
 
 /* f_op.c */
 extern const struct file_operations aufs_file_fop;
-int au_do_open_nondir(struct file *file, int flags);
+int au_do_open_nondir(struct file *file, int flags, struct file *h_file);
 int aufs_release_nondir(struct inode *inode __maybe_unused, struct file *file);
+struct file *au_read_pre(struct file *file, int keep_fi, unsigned int lsc);
 
 /* mf.c */
 void au_mf_add(struct file *h_file, struct file *file);

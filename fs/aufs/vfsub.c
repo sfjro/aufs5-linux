@@ -9,6 +9,7 @@
 
 #include <linux/filelock.h>
 #include <linux/namei.h>
+#include <linux/splice.h>
 #include "aufs.h"
 
 int vfsub_sync_filesystem(struct super_block *h_sb)
@@ -92,6 +93,62 @@ struct file *vfsub_filp_open(const char *path, int oflags, int mode)
 	lockdep_on();
 
 	return file;
+}
+
+/*
+ * Ideally this function should call VFS:do_last() in order to keep all its
+ * checkings. But it is very hard for aufs to regenerate several VFS internal
+ * structure such as nameidata. This is a second (or third) best approach.
+ * cf. linux/fs/namei.c:do_last(), lookup_open() and atomic_open().
+ */
+int vfsub_atomic_open(struct inode *dir, struct dentry *dentry,
+		      struct vfsub_aopen_args *args)
+{
+	int err;
+	struct au_branch *br = args->br;
+	struct file *file = args->file;
+	/* copied from linux/fs/namei.c:atomic_open() */
+	struct dentry *const DENTRY_NOT_SET = (void *)-1UL;
+
+	IMustLock(dir);
+	AuDebugOn(!dir->i_op->atomic_open);
+
+	err = au_br_test_oflag(args->open_flag, br);
+	if (unlikely(err))
+		goto out;
+
+	au_lcnt_inc(&br->br_nfiles);
+	file->__f_path.dentry = DENTRY_NOT_SET;
+	file->__f_path.mnt = au_br_mnt(br);
+	AuDbg("%ps\n", dir->i_op->atomic_open);
+	err = dir->i_op->atomic_open(dir, dentry, file, args->open_flag,
+				     args->create_mode);
+	if (unlikely(err < 0)) {
+		au_lcnt_dec(&br->br_nfiles);
+		goto out;
+	}
+
+	/* temporary workaround for nfsv4 branch */
+	if (au_test_nfs(dir->i_sb))
+		nfs_mark_for_revalidate(dir);
+
+	if (file->f_mode & FMODE_CREATED)
+		fsnotify_create(dir, dentry);
+	if (!(file->f_mode & FMODE_OPENED)) {
+		au_lcnt_dec(&br->br_nfiles);
+		goto out;
+	}
+
+	/* todo: call VFS:may_open() here */
+	/* todo: ima_file_check() too? */
+	if (!err)
+		fsnotify_open(file);
+	else
+		au_lcnt_dec(&br->br_nfiles);
+	/* note that the file is created and still opened */
+
+out:
+	return err;
 }
 
 int vfsub_kern_path(const char *name, unsigned int flags, struct path *path)
@@ -498,6 +555,23 @@ ssize_t vfsub_write_k(struct file *file, void *kbuf, size_t count, loff_t *ppos)
 	return err;
 }
 
+int vfsub_flush(struct file *file, fl_owner_t id)
+{
+	int err;
+
+	err = 0;
+	if (file->f_op->flush) {
+		if (!au_test_nfs(file->f_path.dentry->d_sb))
+			err = file->f_op->flush(file, id);
+		else {
+			lockdep_off();
+			err = file->f_op->flush(file, id);
+			lockdep_on();
+		}
+	}
+	return err;
+}
+
 int vfsub_iterate_dir(struct file *file, struct dir_context *ctx)
 {
 	int err;
@@ -508,6 +582,74 @@ int vfsub_iterate_dir(struct file *file, struct dir_context *ctx)
 	err = iterate_dir(file, ctx);
 	lockdep_on();
 
+	return err;
+}
+
+ssize_t vfsub_splice_read(struct file *in, loff_t *ppos,
+			  struct pipe_inode_info *pipe, size_t len,
+			  unsigned int flags)
+{
+	ssize_t err;
+
+	lockdep_off();
+	err = vfs_splice_read(in, ppos, pipe, len, flags);
+	lockdep_on();
+	file_accessed(in);
+	return err;
+}
+
+ssize_t vfsub_splice_from(struct pipe_inode_info *pipe, struct file *out,
+			  loff_t *ppos, size_t len, unsigned int flags)
+{
+	ssize_t err;
+
+	lockdep_off();
+	err = do_splice_from(pipe, out, ppos, len, flags);
+	lockdep_on();
+	return err;
+}
+
+int vfsub_fsync(struct file *file, const struct path *path, int datasync)
+{
+	int err;
+
+	/* file can be NULL */
+	lockdep_off();
+	err = vfs_fsync(file, datasync);
+	lockdep_on();
+	return err;
+}
+
+/* cf. open.c:do_sys_truncate() and do_sys_ftruncate() */
+int vfsub_trunc(const struct path *h_path, loff_t length, unsigned int attr,
+		struct file *h_file)
+{
+	int err;
+	struct inode *h_inode;
+	struct super_block *h_sb;
+	struct mnt_idmap *h_idmap;
+
+	if (!h_file) {
+		err = vfsub_truncate(h_path, length);
+		goto out;
+	}
+
+	err = security_file_truncate(h_file);
+	if (err)
+		goto out;
+	err = fsnotify_truncate_perm(&h_file->f_path, length);
+	if (err)
+		goto out;
+	h_idmap = mnt_idmap(h_path->mnt);
+	h_inode = d_inode(h_path->dentry);
+	h_sb = h_inode->i_sb;
+	lockdep_off();
+	scoped_guard(super_write, h_sb)
+		err = do_truncate(h_idmap, h_path->dentry, length, attr,
+				  h_file);
+	lockdep_on();
+
+out:
 	return err;
 }
 

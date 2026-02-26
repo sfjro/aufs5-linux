@@ -96,6 +96,15 @@ int vfsub_sync_filesystem(struct super_block *h_sb);
 
 struct file *vfsub_dentry_open(struct path *path, int flags);
 struct file *vfsub_filp_open(const char *path, int oflags, int mode);
+struct au_branch;
+struct vfsub_aopen_args {
+	struct file		*file;
+	unsigned int		open_flag;
+	umode_t			create_mode;
+	struct au_branch	*br;
+};
+int vfsub_atomic_open(struct inode *dir, struct dentry *dentry,
+		      struct vfsub_aopen_args *args);
 int vfsub_kern_path(const char *name, unsigned int flags, struct path *path);
 
 struct dentry *vfsub_lookup_one_len_unlocked(const char *name,
@@ -136,6 +145,29 @@ static inline void vfsub_mnt_drop_write(struct vfsmount *mnt)
 	lockdep_on();
 }
 
+#if 0 /* reserved */
+static inline void vfsub_mnt_drop_write_file(struct file *file)
+{
+	lockdep_off();
+	mnt_drop_write_file(file);
+	lockdep_on();
+}
+#endif
+
+static inline void vfsub_file_start_write(struct file *file)
+{
+	lockdep_off();
+	file_start_write(file);
+	lockdep_on();
+}
+
+static inline void vfsub_file_end_write(struct file *file)
+{
+	lockdep_off();
+	file_end_write(file);
+	lockdep_on();
+}
+
 /* ---------------------------------------------------------------------- */
 
 struct au_hinode;
@@ -165,6 +197,7 @@ ssize_t vfsub_write_u(struct file *file, const char __user *ubuf, size_t count,
 		      loff_t *ppos);
 ssize_t vfsub_write_k(struct file *file, void *kbuf, size_t count,
 		      loff_t *ppos);
+int vfsub_flush(struct file *file, fl_owner_t id);
 int vfsub_iterate_dir(struct file *file, struct dir_context *ctx);
 
 static inline loff_t vfsub_f_size_read(struct file *file)
@@ -188,6 +221,14 @@ static inline int vfsub_file_execed(struct file *file)
 	/* todo: direct access f_flags */
 	return !!(vfsub_file_flags(file) & __FMODE_EXEC);
 }
+
+#if 0 /* reserved */
+static inline void vfsub_file_accessed(struct file *h_file)
+{
+	file_accessed(h_file);
+	vfsub_update_h_iattr(&h_file->f_path, /*did*/NULL); /*ignore*/
+}
+#endif
 
 #if 0 /* reserved */
 static inline void vfsub_touch_atime(struct vfsmount *h_mnt,
@@ -223,6 +264,26 @@ AuStubInt0(vfsub_acl_chmod, struct mnt_idmap *h_idmap,
 	   struct dentry *h_dentry, umode_t h_mode);
 #endif
 
+ssize_t vfsub_splice_read(struct file *in, loff_t *ppos,
+			  struct pipe_inode_info *pipe, size_t len,
+			  unsigned int flags);
+ssize_t vfsub_splice_from(struct pipe_inode_info *pipe, struct file *out,
+			  loff_t *ppos, size_t len, unsigned int flags);
+
+static inline long vfsub_truncate(const struct path *path, loff_t length)
+{
+	long err;
+
+	lockdep_off();
+	err = vfs_truncate(path, length);
+	lockdep_on();
+	return err;
+}
+
+int vfsub_trunc(const struct path *h_path, loff_t length, unsigned int attr,
+		struct file *h_file);
+int vfsub_fsync(struct file *file, const struct path *path, int datasync);
+
 /*
  * re-use branch fs's ioctl(FICLONE) while aufs itself doesn't support such
  * ioctl.
@@ -237,6 +298,20 @@ static inline loff_t vfsub_clone_file_range(struct file *src, struct file *dst,
 	lockdep_on();
 
 	return err;
+}
+
+/* copy_file_range(2) is a systemcall */
+static inline ssize_t vfsub_copy_file_range(struct file *src, loff_t src_pos,
+					    struct file *dst, loff_t dst_pos,
+					    size_t len, unsigned int flags)
+{
+	ssize_t ssz;
+
+	lockdep_off();
+	ssz = vfs_copy_file_range(src, src_pos, dst, dst_pos, len, flags);
+	lockdep_on();
+
+	return ssz;
 }
 
 /* ---------------------------------------------------------------------- */
