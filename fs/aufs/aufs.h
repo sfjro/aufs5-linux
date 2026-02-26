@@ -35,6 +35,7 @@
 #include "hbl.h"
 #include "inode.h"
 #include "lcnt.h"
+#include "loop.h"
 #include "module.h"
 #include "opts.h"
 #include "rwsem.h"
