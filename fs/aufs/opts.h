@@ -13,12 +13,16 @@
 #ifdef __KERNEL__
 
 #include <linux/fs_parser.h>
+#include <linux/namei.h>
 #include <linux/path.h>
 
 enum {
 	Opt_br,
 	Opt_add,
 	Opt_xino, Opt_noxino,
+	Opt_trunc_xino, Opt_trunc_xino_v,
+	Opt_trunc_xino_path, Opt_itrunc_xino,
+	Opt_trunc_xib,
 	Opt_tail, Opt_ignore, Opt_ignore_silent, Opt_err
 };
 
@@ -27,6 +31,7 @@ enum {
 /* mount flags */
 #define AuOpt_XINO		BIT(0)		/* external inode number bitmap
 						   and translation table */
+#define AuOpt_TRUNC_XINO	BIT(1)		/* truncate xino files */
 
 #define AuOpt_Def	AuOpt_XINO
 
@@ -56,19 +61,34 @@ struct au_opt_xino {
 	struct file	*file;
 };
 
+struct au_opt_xino_itrunc {
+	aufs_bindex_t	bindex;
+};
+
 struct au_opt {
 	int type;
 	union {
 		struct au_opt_xino	xino;
+		struct au_opt_xino_itrunc xino_itrunc;
 		struct au_opt_add	add;
+		bool			tf; /* generic flag, true or false */
 		/* add more later */
 	};
 };
+
+/* opts flags */
+#define AuOpts_TRUNC_XIB	BIT(2)
+#define au_ftest_opts(flags, name)	((flags) & AuOpts_##name)
+#define au_fset_opts(flags, name) \
+	do { (flags) |= AuOpts_##name; } while (0)
+#define au_fclr_opts(flags, name) \
+	do { (flags) &= ~AuOpts_##name; } while (0)
 
 struct au_opts {
 	struct au_opt	*opt;
 	int		max_opt;
 
+	unsigned int	flags;
 	unsigned long	sb_flags;
 };
 

@@ -35,7 +35,21 @@ struct au_xino {
 	struct mutex		xi_mtx;	/* protects xi_file array */
 	struct hlist_bl_head	xi_writing;
 
+	atomic_t		xi_truncating;
+
 	struct kref		xi_kref;
+};
+
+/* sysfs entries */
+struct au_brsysfs {
+	char			name[16];
+	struct attribute	attr;
+};
+
+enum {
+	AuBrSysfs_BR,
+	AuBrSysfs_BRID,
+	AuBrSysfs_Last
 };
 
 /* protected by superblock rwsem */
@@ -47,6 +61,11 @@ struct au_branch {
 	int			br_perm;
 	struct path		br_path;
 	au_lcnt_t		br_count;	/* in-use for other */
+
+#ifdef CONFIG_SYSFS
+	/* entries under sysfs per mount-point */
+	struct au_brsysfs	br_sysfs[AuBrSysfs_Last];
+#endif
 };
 
 /* ---------------------------------------------------------------------- */
@@ -118,6 +137,9 @@ int au_xino_write(struct super_block *sb, aufs_bindex_t bindex, ino_t h_ino,
 ssize_t xino_fread(struct file *file, void *buf, size_t size, loff_t *pos);
 ssize_t xino_fwrite(struct file *file, void *buf, size_t size, loff_t *pos);
 
+int au_xib_trunc(struct super_block *sb);
+int au_xino_trunc(struct super_block *sb, aufs_bindex_t bindex, int idx_begin);
+
 struct au_xino *au_xino_alloc(unsigned int nfile);
 int au_xino_put(struct au_branch *br);
 struct file *au_xino_file1(struct au_xino *xi);
@@ -131,6 +153,8 @@ int au_xino_init_br(struct super_block *sb, struct au_branch *br, ino_t hino,
 
 ino_t au_xino_new_ino(struct super_block *sb);
 void au_xino_delete_inode(struct inode *inode, const int unlinked);
+
+int au_xino_path(struct seq_file *seq, struct file *file);
 
 /* ---------------------------------------------------------------------- */
 

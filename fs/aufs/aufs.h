@@ -34,6 +34,7 @@
 #include "opts.h"
 #include "rwsem.h"
 #include "super.h"
+#include "sysaufs.h"
 #include "vfsub.h"
 #include "wkq.h"
 /* add more later */

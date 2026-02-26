@@ -17,6 +17,14 @@
 #include "dentry.h"
 #include "inode.h"
 
+struct path;
+struct seq_file;
+
+/* module parameters */
+extern int sysaufs_brs;
+
+/* ---------------------------------------------------------------------- */
+
 void *au_krealloc(void *p, unsigned int new_sz, gfp_t gfp, int may_shrink);
 void *au_kzrealloc(void *p, unsigned int nused, unsigned int new_sz, gfp_t gfp,
 		   int may_shrink);
@@ -76,6 +84,8 @@ static inline int au_kmidx_sub(size_t sz, size_t new_sz)
 	return -1; /* SLOB is untested */
 #endif
 }
+
+int au_seq_path(struct seq_file *seq, const struct path *path);
 
 /* ---------------------------------------------------------------------- */
 

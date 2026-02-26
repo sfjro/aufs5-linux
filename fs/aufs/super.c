@@ -8,6 +8,7 @@
  */
 
 #include <linux/iversion.h>
+#include <linux/seq_file.h>
 #include "aufs.h"
 
 /*
@@ -64,6 +65,84 @@ out:
 	AuDebugOn(!inode);
 	AuTraceErrPtr(inode);
 	return inode;
+}
+
+/* lock free root dinfo */
+/* re-commit later */ __maybe_unused
+static int au_show_brs(struct seq_file *seq, struct super_block *sb)
+{
+	int err;
+	aufs_bindex_t bindex, bbot;
+	struct path path;
+	struct au_hdentry *hdp;
+	struct au_branch *br;
+	au_br_perm_str_t perm;
+
+	err = 0;
+	bbot = au_sbbot(sb);
+	bindex = 0;
+	hdp = au_hdentry(au_di(sb->s_root), bindex);
+	for (; !err && bindex <= bbot; bindex++, hdp++) {
+		br = au_sbr(sb, bindex);
+		path.mnt = au_br_mnt(br);
+		path.dentry = hdp->hd_dentry;
+		err = au_seq_path(seq, &path);
+		if (!err) {
+			au_optstr_br_perm(&perm, br->br_perm);
+			seq_printf(seq, "=%s", perm.a);
+			if (bindex != bbot)
+				seq_putc(seq, ':');
+		}
+	}
+	if (unlikely(err || seq_has_overflowed(seq)))
+		err = -E2BIG;
+
+	return err;
+}
+
+/* re-commit later */ __maybe_unused
+static int au_show_xino(struct seq_file *seq, struct super_block *sb)
+{
+#ifdef CONFIG_SYSFS
+	return 0;
+#else
+	int err;
+	const int len = sizeof(AUFS_XINO_FNAME) - 1;
+	aufs_bindex_t bindex, brid;
+	struct qstr *name;
+	struct file *f;
+	struct dentry *d, *h_root;
+	struct au_branch *br;
+
+	AuRwMustAnyLock(&sbinfo->si_rwsem);
+
+	err = 0;
+	f = au_sbi(sb)->si_xib;
+	if (!f)
+		goto out;
+
+	/* stop printing the default xino path on the first writable branch */
+	h_root = NULL;
+	bindex = au_xi_root(sb, f->f_path.dentry);
+	if (bindex >= 0) {
+		br = au_sbr_sb(sb, bindex);
+		h_root = au_br_dentry(br);
+	}
+
+	d = f->f_path.dentry;
+	name = &d->d_name;
+	/* safe ->d_parent because the file is unlinked */
+	if (d->d_parent == h_root
+	    && name->len == len
+	    && !memcmp(name->name, AUFS_XINO_FNAME, len))
+		goto out;
+
+	seq_puts(seq, ",xino=");
+	err = au_xino_path(seq, f);
+
+out:
+	return err;
+#endif
 }
 
 /* ---------------------------------------------------------------------- */

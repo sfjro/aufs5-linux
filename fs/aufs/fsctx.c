@@ -28,6 +28,7 @@ static void au_fsctx_dump(struct au_opts *opts)
 	union {
 		struct au_opt_add *add;
 		struct au_opt_xino *xino;
+		struct au_opt_xino_itrunc *xino_itrunc;
 	} u;
 	struct au_opt *opt;
 
@@ -44,6 +45,26 @@ static void au_fsctx_dump(struct au_opts *opts)
 		case Opt_xino:
 			u.xino = &opt->xino;
 			AuDbg("xino {%s %pD}\n", u.xino->path, u.xino->file);
+			break;
+
+#define au_fsctx_TF(name)					  \
+			case Opt_##name:			  \
+				if (opt->tf)			  \
+					AuLabel(name);		  \
+				else				  \
+					AuLabel(no##name);	  \
+				break;
+
+		/* simple true/false flag */
+		au_fsctx_TF(trunc_xino);
+		au_fsctx_TF(trunc_xib);
+#undef au_fsctx_TF
+
+		case Opt_trunc_xino_path:
+			fallthrough;
+		case Opt_itrunc_xino:
+			u.xino_itrunc = &opt->xino_itrunc;
+			AuDbg("trunc_xino %d\n", u.xino_itrunc->bindex);
 			break;
 		case Opt_noxino:
 			AuLabel(noxino);
@@ -73,6 +94,13 @@ const struct fs_parameter_spec aufs_fsctx_paramspec[] = {
 
 	fsparam_path("xino", Opt_xino),
 	fsparam_flag("noxino", Opt_noxino),
+	fsparam_flag_no("trunc_xino", Opt_trunc_xino),
+	/* "trunc_xino_v=%d:%d" */
+	/* fsparam_string("trunc_xino_v", Opt_trunc_xino_v), */
+	fsparam_path("trunc_xino", Opt_trunc_xino_path),
+	fsparam_s32("itrunc_xino", Opt_itrunc_xino),
+	/* fsparam_path("zxino", Opt_zxino), */
+	fsparam_flag_no("trunc_xib", Opt_trunc_xib),
 
 	/* internal use for the scripts */
 	fsparam_string("si", Opt_ignore_silent),
@@ -202,6 +230,77 @@ out:
 	return err;
 }
 
+static
+int au_fsctx_parse_xino_itrunc_path(struct fs_context *fc,
+				    struct au_opt_xino_itrunc *xino_itrunc,
+				    char *pathname)
+{
+	int err;
+	aufs_bindex_t bbot, bindex;
+	struct path path;
+	struct dentry *root;
+	struct au_fsctx_opts *a = fc->fs_private;
+
+	AuDebugOn(!a->sb);
+
+	err = vfsub_kern_path(pathname, AuOpt_LkupDirFlags, &path);
+	if (unlikely(err)) {
+		errorfc(fc, "lookup failed %s (%d)", pathname, err);
+		goto out;
+	}
+
+	xino_itrunc->bindex = -1;
+	root = a->sb->s_root;
+	si_read_lock(a->sb, AuLock_FLUSH);
+	di_read_lock_child(root, /*flags*/0);
+	bbot = au_sbbot(a->sb);
+	for (bindex = 0; bindex <= bbot; bindex++) {
+		if (au_h_dptr(root, bindex) == path.dentry) {
+			xino_itrunc->bindex = bindex;
+			break;
+		}
+	}
+	di_read_unlock(root, /*flags*/0);
+	si_read_unlock(a->sb);
+	path_put(&path);
+
+	if (unlikely(xino_itrunc->bindex < 0)) {
+		err = -EINVAL;
+		errorfc(fc, "no such branch %s", pathname);
+	}
+
+out:
+	AuTraceErr(err);
+	return err;
+}
+
+static int au_fsctx_parse_xino_itrunc(struct fs_context *fc,
+				      struct au_opt_xino_itrunc *xino_itrunc,
+				      unsigned int bindex)
+{
+	int err;
+	aufs_bindex_t bbot;
+	struct super_block *sb;
+	struct au_fsctx_opts *a = fc->fs_private;
+
+	sb = a->sb;
+	AuDebugOn(!sb);
+
+	err = 0;
+	si_noflush_read_lock(sb);
+	bbot = au_sbbot(sb);
+	si_read_unlock(sb);
+	if (bindex <= bbot)
+		xino_itrunc->bindex = bindex;
+	else {
+		err = -EINVAL;
+		errorfc(fc, "out of bounds, %u", bindex);
+	}
+
+	AuTraceErr(err);
+	return err;
+}
+
 static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *param)
 {
 	int err, token;
@@ -231,6 +330,43 @@ static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *para
 	case Opt_xino:
 		err = au_fsctx_parse_xino(fc, &opt->xino, param);
 		break;
+	case Opt_trunc_xino_path:
+		if (!a->sb) {
+			errorfc(fc, "no such branch %s", param->string);
+			break;
+		}
+		err = au_fsctx_parse_xino_itrunc_path(fc, &opt->xino_itrunc,
+						      param->string);
+		break;
+#if 0
+	case Opt_trunc_xino_v:
+		if (!a->sb) {
+			err = 0;
+			a->skipped = 1;
+			break;
+		}
+		err = au_fsctx_parse_xino_itrunc_path(fc, &opt->xino_itrunc,
+						      param->string);
+		break;
+#endif
+	case Opt_itrunc_xino:
+		if (!a->sb) {
+			errorfc(fc, "out of bounds %s", param->string);
+			break;
+		}
+		err = au_fsctx_parse_xino_itrunc(fc, &opt->xino_itrunc,
+						 result.int_32);
+		break;
+
+	/* simple true/false flag */
+#define au_fsctx_TF(name)				\
+		case Opt_##name:			\
+			err = 0;			\
+			opt->tf = !result.negated;	\
+			break
+	au_fsctx_TF(trunc_xino);
+	au_fsctx_TF(trunc_xib);
+#undef au_fsctx_TF
 
 	case Opt_noxino:
 		err = 0;
