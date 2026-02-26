@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-2.0
+
+-include ${src}/priv_def.mk
+
+# For aufs as an outsider, it is still useful to specify CFLAGS from
+# the command-line especially in its module building.
+ccflags-y += ${EXTRA_CFLAGS}
+# sparse requires the full pathname
+ccflags-y += -include ${srctree}/include/uapi/linux/aufs_type.h
+
+obj-$(CONFIG_AUFS_FS) += aufs.o
+aufs-y := module.o
+# add more later
