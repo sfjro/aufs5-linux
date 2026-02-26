@@ -361,8 +361,9 @@ static int au_h_verify_dentry(struct dentry *h_dentry, struct dentry *h_parent,
 	if (d_is_positive(h_dentry)) {
 		h_inode = d_inode(h_dentry);
 		au_iattr_save(&ia, h_inode);
-	} else if (au_test_nfs(h_sb))
+	} else if (au_test_nfs(h_sb) || au_test_fuse(h_sb))
 		/* nfs d_revalidate may return 0 for negative dentry */
+		/* fuse d_revalidate always return 0 for negative dentry */
 		goto out;
 
 	/* main purpose is namei.c:cached_lookup() and d_revalidate */

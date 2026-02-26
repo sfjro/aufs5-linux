@@ -35,8 +35,8 @@ aufs-$(CONFIG_AUFS_XATTR) += xattr.o
 aufs-$(CONFIG_FS_POSIX_ACL) += posix_acl.o
 aufs-$(CONFIG_AUFS_DIRREN) += dirren.o
 aufs-$(CONFIG_AUFS_FHSM) += fhsm.o
+aufs-$(CONFIG_AUFS_POLL) += poll.o
 aufs-$(CONFIG_AUFS_RDU) += rdu.o
 aufs-$(CONFIG_AUFS_BR_HFSPLUS) += hfsplus.o
 aufs-$(CONFIG_AUFS_DEBUG) += debug.o
 aufs-$(CONFIG_AUFS_MAGIC_SYSRQ) += sysrq.o
-# add more later

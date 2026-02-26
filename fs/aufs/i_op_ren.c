@@ -405,8 +405,16 @@ static int do_rename(struct au_ren_args *a)
 		goto out_rename;
 
 	/* update target timestamps */
+	if (a->exchange) {
+		AuDebugOn(au_dbtop(a->dst_dentry) != a->btgt);
+		a->h_path.dentry = au_h_dptr(a->dst_dentry, a->btgt);
+		vfsub_update_h_iattr(&a->h_path, /*did*/NULL); /*ignore*/
+		h_inode = d_inode(a->h_path.dentry);
+		inode_set_ctime_to_ts(a->dst_inode, inode_get_ctime(h_inode));
+	}
 	AuDebugOn(au_dbtop(a->src_dentry) != a->btgt);
 	a->h_path.dentry = au_h_dptr(a->src_dentry, a->btgt);
+	vfsub_update_h_iattr(&a->h_path, /*did*/NULL); /*ignore*/
 	h_inode = d_inode(a->h_path.dentry);
 	inode_set_ctime_to_ts(a->src_inode, inode_get_ctime(h_inode));
 

@@ -15,6 +15,7 @@
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/mm_types.h>
+#include <linux/poll.h>
 #include "rwsem.h"
 
 struct au_branch;
@@ -78,6 +79,11 @@ int au_reval_and_lock_fdi(struct file *file, int (*reopen)(struct file *file),
 			  int wlock, unsigned int fi_lsc);
 int au_do_flush(struct file *file, fl_owner_t id,
 		int (*flush)(struct file *file, fl_owner_t id));
+
+/* poll.c */
+#ifdef CONFIG_AUFS_POLL
+__poll_t aufs_poll(struct file *file, struct poll_table_struct *pt);
+#endif
 
 #ifdef CONFIG_AUFS_BR_HFSPLUS
 /* hfsplus.c */
