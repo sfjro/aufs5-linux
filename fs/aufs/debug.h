@@ -51,6 +51,11 @@ AuStubInt0(au_debug_test, void)
 		pr_debug("DEBUG: " fmt, ##__VA_ARGS__); \
 } while (0)
 #define AuLabel(l)		AuDbg(#l "\n")
+#define AuWarn1(fmt, ...) do { \
+	static unsigned char _c; \
+	if (!_c++) \
+		pr_warn(fmt, ##__VA_ARGS__); \
+} while (0)
 
 #define AuTraceErr(e) do { \
 	if (unlikely((e) < 0)) \
@@ -75,6 +80,7 @@ void au_dpri_dentry(struct dentry *dentry);
 
 #define au_dbg_verify_dinode(d) __au_dbg_verify_dinode(d, __func__, __LINE__)
 void __au_dbg_verify_dinode(struct dentry *dentry, const char *func, int line);
+void au_dbg_verify_gen(struct dentry *parent, unsigned int sigen);
 
 #define AuDbgInode(i) do { \
 	mutex_lock(&au_dbg_mtx); \
@@ -98,6 +104,7 @@ void __au_dbg_verify_dinode(struct dentry *dentry, const char *func, int line);
 } while (0)
 #else
 AuStubVoid(au_dbg_verify_dinode, struct dentry *dentry)
+AuStubVoid(au_dbg_verify_gen, struct dentry *parent, unsigned int sigen)
 
 AuStubVoid(AuDbgInode, struct inode *inode)
 AuStubVoid(AuDbgDAlias, struct inode *inode)

@@ -16,6 +16,12 @@
 #include "debug.h"
 #include "fstype.h"
 
+/* to debug easier, do not make them inlined functions */
+#define MtxMustLock(mtx)	AuDebugOn(!mutex_is_locked(mtx))
+#define IMustLock(i)		AuDebugOn(!inode_is_locked(i))
+
+/* ---------------------------------------------------------------------- */
+
 unsigned int vfsub_inode_nlink_aufs(struct inode *inode);
 
 enum au_inode_type {

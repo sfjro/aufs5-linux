@@ -58,4 +58,17 @@ typedef int16_t aufs_bindex_t;
 
 #define AUFS_FSTYPE		AUFS_NAME
 
+/* branch permissions and attributes */
+#define AUFS_BRPERM_RO		"ro"
+
+#define AuBrPerm_RO		(1 << 1)	/* readonly */
+#define AuBrPerm_Mask		AuBrPerm_RO /* re-commit later */
+
+/* the longest combination */
+#define AuBrPermStrSz	sizeof(AUFS_BRPERM_RO)
+
+typedef struct {
+	char a[AuBrPermStrSz];
+} au_br_perm_str_t;
+
 #endif /* __AUFS_TYPE_H__ */
