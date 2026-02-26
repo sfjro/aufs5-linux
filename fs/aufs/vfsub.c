@@ -11,6 +11,21 @@
 #include <linux/namei.h>
 #include "aufs.h"
 
+int vfsub_sync_filesystem(struct super_block *h_sb)
+{
+	int err;
+
+	lockdep_off();
+	down_read(&h_sb->s_umount);
+	err = sync_filesystem(h_sb);
+	up_read(&h_sb->s_umount);
+	lockdep_on();
+
+	return err;
+}
+
+/* ---------------------------------------------------------------------- */
+
 unsigned int vfsub_inode_nlink_aufs(struct inode *inode)
 {
 	unsigned int nlink;

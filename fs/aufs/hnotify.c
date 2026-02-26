@@ -209,8 +209,7 @@ static int hn_gen_by_inode(char *name, unsigned int nlen, struct inode *inode,
 		}
 		spin_unlock(&inode->i_lock);
 	} else {
-		/* re-commit later */
-		/* au_fset_si(au_sbi(inode->i_sb), FAILED_REFRESH_DIR); */
+		au_fset_si(au_sbi(inode->i_sb), FAILED_REFRESH_DIR);
 		d = d_find_any_alias(inode);
 		if (!d) {
 			au_iigen_dec(inode);
@@ -248,8 +247,7 @@ static int hn_gen_by_name(struct dentry *dentry, const unsigned int isdir)
 		if (d_really_is_positive(dentry))
 			au_iigen_dec(d_inode(dentry));
 	} else {
-		/* re-commit later */
-		/* au_fset_si(au_sbi(dentry->d_sb), FAILED_REFRESH_DIR); */
+		au_fset_si(au_sbi(dentry->d_sb), FAILED_REFRESH_DIR);
 		if (d_really_is_positive(dentry))
 			err = hn_gen_tree(dentry);
 	}
@@ -326,7 +324,6 @@ static int hn_job(struct hn_job_args *a)
 	}
 
 	/* make dir entries obsolete */
-#if 0 /* re-commit later */
 	if (au_ftest_hnjob(a->flags, DIRENT) && a->inode) {
 		struct au_vdir *vdir;
 
@@ -336,7 +333,6 @@ static int hn_job(struct hn_job_args *a)
 		/* IMustLock(a->inode); */
 		/* inode_inc_iversion(a->inode); */
 	}
-#endif
 
 	/* can do nothing but warn */
 	if (au_ftest_hnjob(a->flags, MNTPNT)

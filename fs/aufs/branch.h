@@ -182,7 +182,7 @@ struct au_sbinfo;
 void au_br_free(struct au_sbinfo *sinfo);
 int au_br_index(struct super_block *sb, aufs_bindex_t br_id);
 struct au_opt_add;
-int au_br_add(struct super_block *sb, struct au_opt_add *add);
+int au_br_add(struct super_block *sb, struct au_opt_add *add, int remount);
 
 /* xino.c */
 static const loff_t au_loff_max = LLONG_MAX;
@@ -216,7 +216,7 @@ struct file *au_xino_file1(struct au_xino *xi);
 
 struct au_opt_xino;
 void au_xino_clr(struct super_block *sb);
-int au_xino_set(struct super_block *sb, struct au_opt_xino *xiopt);
+int au_xino_set(struct super_block *sb, struct au_opt_xino *xiopt, int remount);
 struct file *au_xino_def(struct super_block *sb);
 int au_xino_init_br(struct super_block *sb, struct au_branch *br, ino_t hino,
 		    const struct path *base);

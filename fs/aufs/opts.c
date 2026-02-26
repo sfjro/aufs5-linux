@@ -478,6 +478,17 @@ static int au_opt_simple(struct super_block *sb, struct au_opt *opt,
 		sbinfo->si_wbr_copyup_ops = au_wbr_copyup_ops + opt->wbr_copyup;
 		break;
 
+	case Opt_rdcache:
+		sbinfo->si_rdcache
+			= msecs_to_jiffies(opt->rdcache * MSEC_PER_SEC);
+		break;
+	case Opt_rdblk:
+		sbinfo->si_rdblk = opt->rdblk;
+		break;
+	case Opt_rdhash:
+		sbinfo->si_rdhash = opt->rdhash;
+		break;
+
 	case Opt_trunc_xino:
 		if (opt->tf)
 			au_opt_set(sbinfo->si_mntflags, TRUNC_XINO);
@@ -522,10 +533,11 @@ static int au_opt_br(struct super_block *sb, struct au_opt *opt,
 	err = 0;
 	switch (opt->type) {
 	case Opt_add:
-		err = au_br_add(sb, &opt->add);
+		err = au_br_add(sb, &opt->add,
+				au_ftest_opts(opts->flags, REMOUNT));
 		if (!err) {
 			err = 1;
-			/* au_fset_opts(opts->flags, REFRESH); re-commit later */
+			au_fset_opts(opts->flags, REFRESH);
 		}
 		break;
 	}
@@ -541,7 +553,8 @@ static int au_opt_xino(struct super_block *sb, struct au_opt *opt,
 	err = 0;
 	switch (opt->type) {
 	case Opt_xino:
-		err = au_xino_set(sb, &opt->xino);
+		err = au_xino_set(sb, &opt->xino,
+				  !!au_ftest_opts(opts->flags, REMOUNT));
 		if (!err)
 			*opt_xino = &opt->xino;
 		break;
@@ -559,10 +572,10 @@ int au_opts_verify(struct super_block *sb, unsigned long sb_flags,
 {
 	int err;
 	aufs_bindex_t bindex, bbot;
-	unsigned char do_plink, skip, do_free;
+	unsigned char do_plink, skip, do_free, can_no_dreval;
 	struct au_branch *br;
 	struct au_wbr *wbr;
-	struct dentry *root;
+	struct dentry *root, *dentry;
 	struct inode *dir, *h_dir;
 	struct au_sbinfo *sbinfo;
 	struct au_hinode *hdir;
@@ -581,6 +594,8 @@ int au_opts_verify(struct super_block *sb, unsigned long sb_flags,
 	root = sb->s_root;
 	dir = d_inode(root);
 	do_plink = !!au_opt_test(sbinfo->si_mntflags, PLINK);
+	can_no_dreval = !!au_opt_test((sbinfo->si_mntflags | pending),
+				      UDBA_NONE);
 	bbot = au_sbbot(sb);
 	for (bindex = 0; !err && bindex <= bbot; bindex++) {
 		skip = 0;
@@ -620,6 +635,15 @@ int au_opts_verify(struct super_block *sb, unsigned long sb_flags,
 		if (wbr)
 			wbr_wh_read_unlock(wbr);
 
+		if (can_no_dreval) {
+			dentry = br->br_path.dentry;
+			spin_lock(&dentry->d_lock);
+			if (dentry->d_flags &
+			    (DCACHE_OP_REVALIDATE | DCACHE_OP_WEAK_REVALIDATE))
+				can_no_dreval = 0;
+			spin_unlock(&dentry->d_lock);
+		}
+
 		if (skip)
 			continue;
 
@@ -637,6 +661,11 @@ int au_opts_verify(struct super_block *sb, unsigned long sb_flags,
 			br->br_wbr = NULL;
 		}
 	}
+
+	if (can_no_dreval)
+		au_fset_si(sbinfo, NO_DREVAL);
+	else
+		au_fclr_si(sbinfo, NO_DREVAL);
 
 	return err;
 }
@@ -704,7 +733,7 @@ int au_opts_mount(struct super_block *sb, struct au_opts *opts)
 		if (IS_ERR(xino.file))
 			goto out;
 
-		err = au_xino_set(sb, &xino);
+		err = au_xino_set(sb, &xino, /*remount*/0);
 		fput(xino.file);
 		if (unlikely(err))
 			goto out;
@@ -729,6 +758,62 @@ int au_opts_mount(struct super_block *sb, struct au_opts *opts)
 	}
 
 out:
+	return err;
+}
+
+int au_opts_remount(struct super_block *sb, struct au_opts *opts)
+{
+	int err, rerr;
+	unsigned char no_dreval;
+	struct inode *dir;
+	struct au_opt_xino *opt_xino;
+	struct au_opt *opt;
+	struct au_sbinfo *sbinfo;
+
+	SiMustWriteLock(sb);
+
+	err = 0;
+	dir = d_inode(sb->s_root);
+	sbinfo = au_sbi(sb);
+	opt_xino = NULL;
+	opt = opts->opt;
+	while (err >= 0 && opt->type != Opt_tail) {
+		err = au_opt_simple(sb, opt, opts);
+		if (!err)
+			err = au_opt_br(sb, opt, opts);
+		if (!err)
+			err = au_opt_xino(sb, opt, &opt_xino, opts);
+		opt++;
+	}
+	if (err > 0)
+		err = 0;
+	AuTraceErr(err);
+	/* go on even err */
+
+	no_dreval = !!au_ftest_si(sbinfo, NO_DREVAL);
+	rerr = au_opts_verify(sb, opts->sb_flags, /*pending*/0);
+	if (unlikely(rerr && !err))
+		err = rerr;
+
+	if (no_dreval != !!au_ftest_si(sbinfo, NO_DREVAL))
+		au_fset_opts(opts->flags, REFRESH_DOP);
+
+	if (au_ftest_opts(opts->flags, TRUNC_XIB)) {
+		rerr = au_xib_trunc(sb);
+		if (unlikely(rerr && !err))
+			err = rerr;
+	}
+
+	/* will be handled by the caller */
+	if (!au_ftest_opts(opts->flags, REFRESH)
+	    && (opts->given_udba
+		|| au_opt_test(sbinfo->si_mntflags, XINO)
+		|| au_ftest_opts(opts->flags, REFRESH_DOP)
+		    ))
+		au_fset_opts(opts->flags, REFRESH);
+
+	AuDbg("status 0x%x\n", opts->flags);
+
 	return err;
 }
 

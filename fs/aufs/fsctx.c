@@ -34,12 +34,60 @@ static int cvt_err(int err)
 	return err;
 }
 
-/* ---------------------------------------------------------------------- */
+static int au_fsctx_reconfigure(struct fs_context *fc)
+{
+	int err, do_dx;
+	unsigned int mntflags;
+	struct dentry *root;
+	struct super_block *sb;
+	struct inode *inode;
+	struct au_fsctx_opts *a = fc->fs_private;
 
-/* remove later */
-static const struct dentry_operations dummy_dentry_operations = {
-	.d_delete = always_delete_dentry,
-};
+	AuDbg("fc %p\n", fc);
+
+	root = fc->root;
+	sb = root->d_sb;
+	root = sb->s_root; /* "bind"-mount may give us non-root */
+	AuDebugOn(!IS_ROOT(root));
+	err = si_write_lock(sb, AuLock_FLUSH | AuLock_NOPLM);
+	if (!err) {
+		di_write_lock_child(root);
+		err = au_opts_verify(sb, fc->sb_flags, /*pending*/0);
+		aufs_write_unlock(root);
+	}
+
+	inode = d_inode(root);
+	inode_lock(inode);
+	err = si_write_lock(sb, AuLock_FLUSH | AuLock_NOPLM);
+	if (unlikely(err))
+		goto out;
+	di_write_lock_child(root);
+
+	/* au_opts_remount() may return an error */
+	err = au_opts_remount(sb, &a->opts);
+
+	if (au_ftest_opts(a->opts.flags, REFRESH))
+		au_remount_refresh(sb, au_ftest_opts(a->opts.flags,
+						     REFRESH_DOP));
+
+	if (au_ftest_opts(a->opts.flags, REFRESH_DYAOP)) {
+		mntflags = au_mntflags(sb);
+		do_dx = !!au_opt_test(mntflags, DIO);
+		au_dy_arefresh(do_dx);
+	}
+
+	aufs_write_unlock(root);
+
+out:
+	inode_unlock(inode);
+	err = cvt_err(err);
+	if (unlikely(err))
+		pr_err("remount err %d\n", err);
+
+	return err;
+}
+
+/* ---------------------------------------------------------------------- */
 
 static int au_fsctx_fill_super(struct super_block *sb, struct fs_context *fc)
 {
@@ -60,7 +108,7 @@ static int au_fsctx_fill_super(struct super_block *sb, struct fs_context *fc)
 	/* all timestamps always follow the ones on the branch */
 	sb->s_flags |= SB_NOATIME | SB_NODIRATIME | SB_I_VERSION;
 	sb->s_op = &aufs_sop;
-	set_default_d_op(sb, &dummy_dentry_operations); /* replace later */
+	set_default_d_op(sb, &aufs_dop);
 	sb->s_magic = AUFS_SUPER_MAGIC;
 	sb->s_maxbytes = 0;
 	sb->s_stack_depth = 1;
@@ -81,6 +129,12 @@ static int au_fsctx_fill_super(struct super_block *sb, struct fs_context *fc)
 	aufs_write_lock(root);
 	err = au_opts_mount(sb, &a->opts);
 	AuTraceErr(err);
+	if (!err && au_ftest_si(sbinfo, NO_DREVAL)) {
+		set_default_d_op(sb, &aufs_dop_noreval);
+		/* infofc(fc, "%ps", sb->__s_d_op); */
+		pr_info("%ps\n", sb->__s_d_op);
+		au_refresh_dop(root, /*force_reval*/0);
+	}
 	aufs_write_unlock(root);
 	inode_unlock(inode);
 	if (!err)
@@ -131,6 +185,16 @@ static void au_fsctx_dump(struct au_opts *opts)
 			AuDbg("add {b%d, %s, 0x%x, %p}\n",
 				  u.add->bindex, u.add->pathname, u.add->perm,
 				  u.add->path.dentry);
+			break;
+
+		case Opt_rdcache:
+			AuDbg("rdcache %d\n", opt->rdcache);
+			break;
+		case Opt_rdblk:
+			AuDbg("rdblk %d\n", opt->rdblk);
+			break;
+		case Opt_rdhash:
+			AuDbg("rdhash %u\n", opt->rdhash);
 			break;
 
 		case Opt_xino:
@@ -247,6 +311,12 @@ const struct fs_parameter_spec aufs_fsctx_paramspec[] = {
 	fsparam_string("udba", Opt_udba),
 
 	fsparam_flag_no("dio", Opt_dio),
+
+	fsparam_s32("rdcache", Opt_rdcache),
+	/* "def" or s32 */
+	fsparam_string("rdblk", Opt_rdblk),
+	/* "def" or s32 */
+	fsparam_string("rdhash", Opt_rdhash),
 
 	fsparam_string("create", Opt_wbr_create),
 	fsparam_string("create_policy", Opt_wbr_create),
@@ -508,6 +578,63 @@ static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *para
 						 result.int_32);
 		break;
 
+	case Opt_rdcache:
+		if (unlikely(result.int_32 > AUFS_RDCACHE_MAX)) {
+			errorfc(fc, "rdcache must be smaller than %d",
+				AUFS_RDCACHE_MAX);
+			break;
+		}
+		err = 0;
+		opt->rdcache = result.int_32;
+		break;
+
+	case Opt_rdblk:
+		err = 0;
+		opt->rdblk = AUFS_RDBLK_DEF;
+		if (!strcmp(param->string, "def"))
+			break;
+
+		err = kstrtoint(param->string, 0, &result.int_32);
+		if (unlikely(err)) {
+			errorfc(fc, "bad value in %s", param->key);
+			break;
+		}
+		err = -EINVAL;
+		if (unlikely(result.int_32 < 0
+			     || result.int_32 > KMALLOC_MAX_SIZE)) {
+			errorfc(fc, "bad value in %s", param->key);
+			break;
+		}
+		if (unlikely(result.int_32 && result.int_32 < NAME_MAX)) {
+			errorfc(fc, "rdblk must be larger than %d", NAME_MAX);
+			break;
+		}
+		err = 0;
+		opt->rdblk = result.int_32;
+		break;
+
+	case Opt_rdhash:
+		err = 0;
+		opt->rdhash = AUFS_RDHASH_DEF;
+		if (!strcmp(param->string, "def"))
+			break;
+
+		err = kstrtoint(param->string, 0, &result.int_32);
+		if (unlikely(err)) {
+			errorfc(fc, "bad value in %s", param->key);
+			break;
+		}
+		/* how about zero? */
+		if (result.int_32 < 0
+		    || result.int_32 * sizeof(struct hlist_head)
+		    > KMALLOC_MAX_SIZE) {
+			err = -EINVAL;
+			errorfc(fc, "bad integer in %s", param->key);
+			break;
+		}
+		opt->rdhash = result.int_32;
+		break;
+
 	case Opt_udba:
 		opt->udba = au_udba_val(param->string);
 		if (opt->udba >= 0)
@@ -674,7 +801,8 @@ static const struct fs_context_operations au_fsctx_ops = {
 	.free			= au_fsctx_free,
 	.parse_param		= au_fsctx_parse_param,
 	.parse_monolithic	= au_fsctx_parse_monolithic,
-	.get_tree		= au_fsctx_get_tree
+	.get_tree		= au_fsctx_get_tree,
+	.reconfigure		= au_fsctx_reconfigure
 	/*
 	 * nfs4 requires ->dup()? No.
 	 * I don't know what is this ->dup() for.
@@ -706,12 +834,20 @@ int aufs_fsctx_init(struct fs_context *fc)
 	a->opts.sb_flags = fc->sb_flags;
 
 	a->sb = NULL;
-	a->sbinfo = au_si_alloc(a->sb);
-	AuDebugOn(!a->sbinfo);
-	err = PTR_ERR(a->sbinfo);
-	if (IS_ERR(a->sbinfo))
-		goto out_opt;
-	au_rw_write_unlock(&a->sbinfo->si_rwsem);
+	if (fc->root) {
+		AuDebugOn(fc->purpose != FS_CONTEXT_FOR_RECONFIGURE);
+		a->opts.flags = AuOpts_REMOUNT;
+		a->sb = fc->root->d_sb;
+		a->sbinfo = au_sbi(a->sb);
+		kobject_get(&a->sbinfo->si_kobj);
+	} else {
+		a->sbinfo = au_si_alloc(a->sb);
+		AuDebugOn(!a->sbinfo);
+		err = PTR_ERR(a->sbinfo);
+		if (IS_ERR(a->sbinfo))
+			goto out_opt;
+		au_rw_write_unlock(&a->sbinfo->si_rwsem);
+	}
 
 	err = 0;
 	fc->fs_private = a;

@@ -14,6 +14,7 @@
 
 #include <linux/fs.h>
 #include <linux/kobject.h>
+#include "lcnt.h"
 #include "rwsem.h"
 #include "wkq.h"
 
@@ -62,8 +63,17 @@ struct au_sbinfo {
 	 */
 	struct au_rwsem		si_rwsem;
 
+	/*
+	 * dirty approach to protect sb->sb_inodes from
+	 * remount.
+	 */
+	au_lcnt_t		si_ninodes;
+
 	/* branch management */
 	unsigned int		si_generation;
+
+	/* see AuSi_ flags */
+	unsigned char		au_si_status;
 
 	aufs_bindex_t		si_bbot;
 
@@ -109,6 +119,11 @@ struct au_sbinfo {
 	atomic_t		si_xigen_next;
 #endif
 
+	/* vdir parameters */
+	unsigned long		si_rdcache;	/* max cache time in jiffies */
+	unsigned int		si_rdblk;	/* deblk size */
+	unsigned int		si_rdhash;	/* hash size */
+
 	/* pseudo_link list */
 	struct hlist_bl_head	si_plink[AuPlink_NHASH];
 	wait_queue_head_t	si_plink_wq;
@@ -130,6 +145,32 @@ struct au_sbinfo {
 	/* dirty, necessary for unmounting, sysfs and sysrq */
 	struct super_block	*si_sb;
 };
+
+/* sbinfo status flags */
+/*
+ * set true when refresh_dirs() failed at remount time.
+ * then try refreshing dirs at access time again.
+ * if it is false, refreshing dirs at access time is unnecessary
+ */
+#define AuSi_FAILED_REFRESH_DIR	BIT(0)
+
+#define AuSi_NO_DREVAL		BIT(2)		/* disable all d_revalidate */
+
+static inline unsigned char au_do_ftest_si(struct au_sbinfo *sbi,
+					   unsigned int flag)
+{
+	AuRwMustAnyLock(&sbi->si_rwsem);
+	return sbi->au_si_status & flag;
+}
+#define au_ftest_si(sbinfo, name)	au_do_ftest_si(sbinfo, AuSi_##name)
+#define au_fset_si(sbinfo, name) do { \
+	AuRwMustWriteLock(&(sbinfo)->si_rwsem); \
+	(sbinfo)->au_si_status |= AuSi_##name; \
+} while (0)
+#define au_fclr_si(sbinfo, name) do { \
+	AuRwMustWriteLock(&(sbinfo)->si_rwsem); \
+	(sbinfo)->au_si_status &= ~AuSi_##name; \
+} while (0)
 
 /* ---------------------------------------------------------------------- */
 
@@ -157,6 +198,15 @@ struct au_sbinfo {
 
 /* super.c */
 struct inode *au_iget_locked(struct super_block *sb, ino_t ino);
+
+typedef unsigned long long (*au_arraycb_t)(struct super_block *sb, void *array,
+					   unsigned long long max, void *arg);
+void *au_array_alloc(unsigned long long *hint, au_arraycb_t cb,
+		     struct super_block *sb, void *arg);
+struct inode **au_iarray_alloc(struct super_block *sb, unsigned long long *max);
+void au_iarray_free(struct inode **a, unsigned long long max);
+
+void au_remount_refresh(struct super_block *sb, unsigned int do_dop);
 extern const struct super_operations aufs_sop;
 int au_alloc_root(struct super_block *sb);
 extern struct file_system_type aufs_fs_type;

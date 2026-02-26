@@ -61,6 +61,8 @@ ssize_t sysaufs_si_show(struct kobject *kobj, struct attribute *attr,
 void sysaufs_br_init(struct au_branch *br);
 
 AuStubVoid(sysaufs_brs_init, void)
+void sysaufs_brs_add(struct super_block *sb, aufs_bindex_t bindex);
+void sysaufs_brs_del(struct super_block *sb, aufs_bindex_t bindex);
 
 #else
 #define sysaufs_attr_group	NULL
@@ -75,6 +77,9 @@ static inline void sysaufs_brs_init(void)
 {
 	sysaufs_brs = 0;
 }
+
+AuStubVoid(sysaufs_brs_add, struct super_block *sb, aufs_bindex_t bindex)
+AuStubVoid(sysaufs_brs_del, struct super_block *sb, aufs_bindex_t bindex)
 
 #endif /* CONFIG_SYSFS */
 

@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include "debug.h"
 #include "dentry.h"
+#include "dir.h"
 #include "file.h"
 #include "inode.h"
 
@@ -106,6 +107,8 @@ enum {
 	AuCache_DINFO,
 	AuCache_ICNTNR,
 	AuCache_FINFO,
+	AuCache_VDIR,
+	AuCache_DEHSTR,
 	AuCache_HNOTIFY, /* must be last */
 	AuCache_Last
 };
@@ -147,6 +150,12 @@ static inline struct au_icntnr *au_cache_alloc_icntnr(struct super_block *sb)
 
 AuCacheFuncs(finfo, FINFO);
 AuCacheFuncAlloc(finfo, FINFO);
+
+AuCacheFuncs(vdir, VDIR);
+AuCacheFuncAlloc(vdir, VDIR);
+
+AuCacheFuncs(vdir_dehstr, DEHSTR);
+AuCacheFuncAlloc(vdir_dehstr, DEHSTR);
 
 #ifdef CONFIG_AUFS_HNOTIFY
 AuCacheFuncs(hnotify, HNOTIFY);
