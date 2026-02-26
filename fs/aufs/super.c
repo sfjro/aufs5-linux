@@ -226,3 +226,86 @@ const struct super_operations aufs_sop = {
 	.drop_inode	= inode_just_drop,
 	.put_super	= aufs_put_super
 };
+
+/* ---------------------------------------------------------------------- */
+
+int au_alloc_root(struct super_block *sb)
+{
+	int err;
+	struct inode *inode;
+	struct dentry *root;
+
+	err = -ENOMEM;
+	inode = au_iget_locked(sb, AUFS_ROOT_INO);
+	err = PTR_ERR(inode);
+	if (IS_ERR(inode))
+		goto out;
+
+	inode->i_op = &simple_dir_inode_operations; /* replace later */
+	inode->i_fop = &simple_dir_operations; /* replace later */
+	inode->i_mode = S_IFDIR;
+	vfsub_inode_nlink_init(inode, 2);
+	unlock_new_inode(inode);
+
+	root = d_make_root(inode);
+	if (unlikely(!root))
+		goto out;
+	err = PTR_ERR(root);
+	if (IS_ERR(root))
+		goto out;
+
+	err = au_di_init(root);
+	if (!err) {
+		sb->s_root = root;
+		return 0; /* success */
+	}
+	dput(root);
+
+out:
+	return err;
+}
+
+/* ---------------------------------------------------------------------- */
+
+static void aufs_kill_sb(struct super_block *sb)
+{
+	struct au_sbinfo *sbinfo;
+	struct dentry *root;
+
+	sbinfo = au_sbi(sb);
+	if (!sbinfo)
+		goto out;
+
+	au_sbilist_del(sb);
+
+	root = sb->s_root;
+	if (root)
+		aufs_write_lock(root);
+	else
+		__si_write_lock(sb);
+	if (sbinfo->si_wbr_create_ops->fin)
+		sbinfo->si_wbr_create_ops->fin(sb);
+	if (au_opt_test(sbinfo->si_mntflags, PLINK))
+		au_plink_put(sb, /*verbose*/1);
+	au_xino_clr(sb);
+	if (root)
+		aufs_write_unlock(root);
+	else
+		__si_write_unlock(sb);
+
+	sbinfo->si_sb = NULL;
+	au_nwt_flush(&sbinfo->si_nowait);
+
+out:
+	kill_anon_super(sb);
+}
+
+struct file_system_type aufs_fs_type = {
+	.name		= AUFS_FSTYPE,
+	.fs_flags	= FS_MGTIME,
+	.init_fs_context = aufs_fsctx_init,
+	.parameters	= aufs_fsctx_paramspec,
+	.kill_sb	= aufs_kill_sb,
+	/* no need to __module_get() and module_put(). */
+	.owner		= THIS_MODULE,
+};

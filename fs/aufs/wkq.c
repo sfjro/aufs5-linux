@@ -236,7 +236,15 @@ static void au_wkq_comp_free(struct completion *comp)
 
 static void au_wkq_run(struct au_wkinfo *wkinfo)
 {
-	au_dbg_verify_kthread();
+	if (au_ftest_wkq(wkinfo->flags, NEST)) {
+		if (au_wkq_test()) {
+			AuWarn1("wkq from wkq, unless silly-rename on NFS,"
+				" due to a dead dir by UDBA,"
+				" or async xino write?\n");
+			AuDebugOn(au_ftest_wkq(wkinfo->flags, WAIT));
+		}
+	} else
+		au_dbg_verify_kthread();
 
 	if (au_ftest_wkq(wkinfo->flags, WAIT)) {
 		INIT_WORK_ONSTACK(&wkinfo->wk, wkq_func);

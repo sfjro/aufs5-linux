@@ -122,7 +122,7 @@ static void au_xino_lock_dir(struct super_block *sb, const struct path *xipath,
 	if (bindex >= 0) {
 		/* rw branch root */
 		ldir->hdir = au_hi(d_inode(sb->s_root), bindex);
-		inode_lock_nested(ldir->hdir->hi_inode, AuLsc_I_PARENT);
+		au_hn_inode_lock_nested(ldir->hdir, AuLsc_I_PARENT);
 	} else {
 		/* other */
 		ldir->parent = au_dget_parent_lock(xipath->dentry,
@@ -134,7 +134,7 @@ static void au_xino_lock_dir(struct super_block *sb, const struct path *xipath,
 static void au_xino_unlock_dir(struct au_xino_lock_dir *ldir)
 {
 	if (ldir->hdir)
-		inode_unlock(ldir->hdir->hi_inode);
+		au_hn_inode_unlock(ldir->hdir);
 	else {
 		inode_unlock(ldir->dir);
 		dput(ldir->parent);
@@ -1771,6 +1771,103 @@ void au_xino_delete_inode(struct inode *inode, const int unlinked)
 		    && au_test_fs_trunc_xino(au_br_sb(br)))
 			xino_try_trunc(sb, br);
 	}
+}
+
+/* ---------------------------------------------------------------------- */
+
+static int au_xinondir_find(struct au_xino *xi, ino_t h_ino)
+{
+	int found, total, i;
+
+	found = -1;
+	total = xi->xi_nondir.total;
+	for (i = 0; i < total; i++) {
+		if (xi->xi_nondir.array[i] != h_ino)
+			continue;
+		found = i;
+		break;
+	}
+
+	return found;
+}
+
+static int au_xinondir_expand(struct au_xino *xi)
+{
+	int err, sz;
+	ino_t *p;
+
+	BUILD_BUG_ON(KMALLOC_MAX_SIZE > INT_MAX);
+
+	err = -ENOMEM;
+	sz = xi->xi_nondir.total * sizeof(ino_t);
+	if (unlikely(sz > KMALLOC_MAX_SIZE / 2))
+		goto out;
+	p = au_kzrealloc(xi->xi_nondir.array, sz, sz << 1, GFP_ATOMIC,
+			 /*may_shrink*/0);
+	if (p) {
+		xi->xi_nondir.array = p;
+		xi->xi_nondir.total <<= 1;
+		AuDbg("xi_nondir.total %d\n", xi->xi_nondir.total);
+		err = 0;
+	}
+
+out:
+	return err;
+}
+
+void au_xinondir_leave(struct super_block *sb, aufs_bindex_t bindex,
+		       ino_t h_ino, int idx)
+{
+	struct au_xino *xi;
+
+	AuDebugOn(!au_opt_test(au_mntflags(sb), XINO));
+	xi = au_sbr(sb, bindex)->br_xino;
+	AuDebugOn(idx < 0 || xi->xi_nondir.total <= idx);
+
+	spin_lock(&xi->xi_nondir.spin);
+	AuDebugOn(xi->xi_nondir.array[idx] != h_ino);
+	xi->xi_nondir.array[idx] = 0;
+	spin_unlock(&xi->xi_nondir.spin);
+	wake_up_all(&xi->xi_nondir.wqh);
+}
+
+int au_xinondir_enter(struct super_block *sb, aufs_bindex_t bindex, ino_t h_ino,
+		      int *idx)
+{
+	int err, found, empty;
+	struct au_xino *xi;
+
+	err = 0;
+	*idx = -1;
+	if (!au_opt_test(au_mntflags(sb), XINO))
+		goto out; /* no xino */
+
+	xi = au_sbr(sb, bindex)->br_xino;
+
+again:
+	spin_lock(&xi->xi_nondir.spin);
+	found = au_xinondir_find(xi, h_ino);
+	if (found == -1) {
+		empty = au_xinondir_find(xi, /*h_ino*/0);
+		if (empty == -1) {
+			empty = xi->xi_nondir.total;
+			err = au_xinondir_expand(xi);
+			if (unlikely(err))
+				goto out_unlock;
+		}
+		xi->xi_nondir.array[empty] = h_ino;
+		*idx = empty;
+	} else {
+		spin_unlock(&xi->xi_nondir.spin);
+		wait_event(xi->xi_nondir.wqh,
+			   xi->xi_nondir.array[found] != h_ino);
+		goto again;
+	}
+
+out_unlock:
+	spin_unlock(&xi->xi_nondir.spin);
+out:
+	return err;
 }
 
 /* ---------------------------------------------------------------------- */

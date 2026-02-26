@@ -285,6 +285,24 @@ void au_set_h_dptr(struct dentry *dentry, aufs_bindex_t bindex,
 	}
 }
 
+int au_dbrange_test(struct dentry *dentry)
+{
+	int err;
+	aufs_bindex_t btop, bbot;
+
+	err = 0;
+	btop = au_dbtop(dentry);
+	bbot = au_dbbot(dentry);
+	if (btop >= 0)
+		AuDebugOn(bbot < 0 && btop > bbot);
+	else {
+		err = -EIO;
+		AuDebugOn(bbot >= 0);
+	}
+
+	return err;
+}
+
 int au_digen_test(struct dentry *dentry, unsigned int sigen)
 {
 	int err;

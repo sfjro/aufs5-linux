@@ -24,6 +24,7 @@ enum {
 	Opt_trunc_xino_path, Opt_itrunc_xino,
 	Opt_trunc_xib,
 	Opt_plink, Opt_list_plink,
+	Opt_udba,
 	Opt_dio,
 	Opt_wbr_copyup, Opt_wbr_create,
 	Opt_tail, Opt_ignore, Opt_ignore_silent, Opt_err
@@ -138,6 +139,7 @@ struct au_opt {
 		struct au_opt_xino	xino;
 		struct au_opt_xino_itrunc xino_itrunc;
 		struct au_opt_add	add;
+		int			udba;
 		struct au_opt_wbr_create wbr_create;
 		int			wbr_copyup;
 		bool			tf; /* generic flag, true or false */
@@ -158,6 +160,7 @@ struct au_opts {
 	struct au_opt	*opt;
 	int		max_opt;
 
+	unsigned int	given_udba;
 	unsigned int	flags;
 	unsigned long	sb_flags;
 };

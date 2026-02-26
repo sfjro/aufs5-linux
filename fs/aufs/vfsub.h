@@ -155,6 +155,23 @@ static inline loff_t vfsub_f_size_read(struct file *file)
 	return i_size_read(file_inode(file));
 }
 
+static inline unsigned int vfsub_file_flags(struct file *file)
+{
+	unsigned int flags;
+
+	spin_lock(&file->f_lock);
+	flags = file->f_flags;
+	spin_unlock(&file->f_lock);
+
+	return flags;
+}
+
+static inline int vfsub_file_execed(struct file *file)
+{
+	/* todo: direct access f_flags */
+	return !!(vfsub_file_flags(file) & __FMODE_EXEC);
+}
+
 /*
  * re-use branch fs's ioctl(FICLONE) while aufs itself doesn't support such
  * ioctl.

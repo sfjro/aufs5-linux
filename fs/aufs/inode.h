@@ -41,9 +41,17 @@ struct au_hinode {
 	struct dentry		*hi_whdentry;
 };
 
+/* ig_flags */
+#define AuIG_HALF_REFRESHED		1
+#define au_ig_ftest(flags, name)	((flags) & AuIG_##name)
+#define au_ig_fset(flags, name) \
+	do { (flags) |= AuIG_##name; } while (0)
+#define au_ig_fclr(flags, name) \
+	do { (flags) &= ~AuIG_##name; } while (0)
+
 struct au_iigen {
 	spinlock_t	ig_spin;
-	__u32		ig_generation;
+	__u32		ig_generation, ig_flags;
 };
 
 struct au_iinfo {
@@ -127,6 +135,11 @@ static inline void au_nlink_unlock(struct inode *inode)
 
 /* inode.c */
 struct inode *au_igrab(struct inode *inode);
+int au_refresh_hinode_self(struct inode *inode);
+int au_refresh_hinode(struct inode *inode, struct dentry *dentry);
+int au_ino(struct super_block *sb, aufs_bindex_t bindex, ino_t h_ino,
+	   unsigned int d_type, ino_t *ino);
+struct inode *au_new_inode(struct dentry *dentry, int must_new);
 int au_test_ro(struct super_block *sb, aufs_bindex_t bindex,
 	       struct inode *inode);
 int au_test_h_perm(struct mnt_idmap *h_idmap, struct inode *h_inode,
@@ -275,7 +288,7 @@ static inline void au_icntnr_init(struct au_icntnr *c)
 #endif
 }
 
-static inline unsigned int au_iigen(struct inode *inode)
+static inline unsigned int au_iigen(struct inode *inode, unsigned int *igflags)
 {
 	unsigned int gen;
 	struct au_iinfo *iinfo;
@@ -284,6 +297,8 @@ static inline unsigned int au_iigen(struct inode *inode)
 	iinfo = au_ii(inode);
 	iigen = &iinfo->ii_generation;
 	spin_lock(&iigen->ig_spin);
+	if (igflags)
+		*igflags = iigen->ig_flags;
 	gen = iigen->ig_generation;
 	spin_unlock(&iigen->ig_spin);
 
@@ -319,7 +334,7 @@ static inline int au_iigen_test(struct inode *inode, unsigned int sigen)
 	int err;
 
 	err = 0;
-	if (unlikely(inode && au_iigen(inode) != sigen))
+	if (unlikely(inode && au_iigen(inode, NULL) != sigen))
 		err = -EIO;
 
 	return err;

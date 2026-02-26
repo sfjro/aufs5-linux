@@ -266,6 +266,14 @@ static inline int au_test_fs_notime(struct super_block *sb)
 		;
 }
 
+/* temporary support for i#1 in cramfs */
+static inline int au_test_fs_unique_ino(struct inode *inode)
+{
+	if (au_test_cramfs(inode->i_sb))
+		return inode->i_ino != 1;
+	return 1;
+}
+
 /* ---------------------------------------------------------------------- */
 
 /*
