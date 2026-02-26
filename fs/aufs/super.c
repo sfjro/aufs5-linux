@@ -277,6 +277,8 @@ static int aufs_show_options(struct seq_file *m, struct dentry *dentry)
 	AuUInt(RDBLK, rdblk, sbinfo->si_rdblk);
 	AuUInt(RDHASH, rdhash, sbinfo->si_rdhash);
 
+	au_fhsm_show(m, sbinfo);
+
 	AuBool(DIRREN, dirren);
 	AuBool(SUM, sum);
 	/* AuBool(SUM_W, wsum); */
@@ -815,6 +817,7 @@ static void aufs_kill_sb(struct super_block *sb)
 	else
 		__si_write_lock(sb);
 
+	au_fhsm_fin(sb);
 	if (sbinfo->si_wbr_create_ops->fin)
 		sbinfo->si_wbr_create_ops->fin(sb);
 	if (au_opt_test(sbinfo->si_mntflags, UDBA_HNOTIFY)) {

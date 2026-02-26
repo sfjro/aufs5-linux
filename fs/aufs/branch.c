@@ -7,6 +7,7 @@
  * branch management
  */
 
+#include <linux/compat.h>
 #include <linux/statfs.h>
 #include "aufs.h"
 
@@ -35,6 +36,11 @@ static void au_br_do_free(struct au_branch *br)
 			dput(wbr->wbr_wh[i]);
 		AuDebugOn(atomic_read(&wbr->wbr_wh_running));
 		AuRwDestroy(&wbr->wbr_wh_rwsem);
+	}
+
+	if (br->br_fhsm) {
+		au_br_fhsm_fin(br->br_fhsm);
+		au_kfree_try_rcu(br->br_fhsm);
 	}
 
 	key = br->br_dykey;
@@ -135,6 +141,12 @@ static struct au_branch *au_br_alloc(struct super_block *sb, int new_nbranch,
 			goto out_hnotify;
 	}
 
+	if (au_br_fhsm(perm)) {
+		err = au_fhsm_br_alloc(add_branch);
+		if (unlikely(err))
+			goto out_wbr;
+	}
+
 	root = sb->s_root;
 	err = au_sbr_realloc(au_sbi(sb), new_nbranch, /*may_shrink*/0);
 	if (!err)
@@ -147,8 +159,8 @@ static struct au_branch *au_br_alloc(struct super_block *sb, int new_nbranch,
 	if (!err)
 		return add_branch; /* success */
 
+out_wbr:
 	au_kfree_rcu(add_branch->br_wbr);
-
 out_hnotify:
 	au_hnotify_fin_br(add_branch);
 out_xino:
@@ -1088,6 +1100,78 @@ out:
 
 /* ---------------------------------------------------------------------- */
 
+static int au_ibusy(struct super_block *sb, struct aufs_ibusy __user *arg)
+{
+	int err;
+	aufs_bindex_t btop, bbot;
+	struct aufs_ibusy ibusy;
+	struct inode *inode, *h_inode;
+
+	err = -EPERM;
+	if (unlikely(!capable(CAP_SYS_ADMIN)))
+		goto out;
+
+	err = copy_from_user(&ibusy, arg, sizeof(ibusy));
+	if (!err)
+		/* VERIFY_WRITE */
+		err = !access_ok(&arg->h_ino, sizeof(arg->h_ino));
+	if (unlikely(err)) {
+		err = -EFAULT;
+		AuTraceErr(err);
+		goto out;
+	}
+
+	err = -EINVAL;
+	si_read_lock(sb, AuLock_FLUSH);
+	if (unlikely(ibusy.bindex < 0 || ibusy.bindex > au_sbbot(sb)))
+		goto out_unlock;
+
+	err = 0;
+	ibusy.h_ino = 0; /* invalid */
+	inode = ilookup(sb, ibusy.ino);
+	if (!inode
+	    || inode->i_ino == AUFS_ROOT_INO
+	    || au_is_bad_inode(inode))
+		goto out_unlock;
+
+	ii_read_lock_child(inode);
+	btop = au_ibtop(inode);
+	bbot = au_ibbot(inode);
+	if (btop <= ibusy.bindex && ibusy.bindex <= bbot) {
+		h_inode = au_h_iptr(inode, ibusy.bindex);
+		if (h_inode && au_test_ibusy(inode, btop, bbot))
+			ibusy.h_ino = h_inode->i_ino;
+	}
+	ii_read_unlock(inode);
+	iput(inode);
+
+out_unlock:
+	si_read_unlock(sb);
+	if (!err) {
+		err = __put_user(ibusy.h_ino, &arg->h_ino);
+		if (unlikely(err)) {
+			err = -EFAULT;
+			AuTraceErr(err);
+		}
+	}
+out:
+	return err;
+}
+
+long au_ibusy_ioctl(struct file *file, unsigned long arg)
+{
+	return au_ibusy(file->f_path.dentry->d_sb, (void __user *)arg);
+}
+
+#ifdef CONFIG_COMPAT
+long au_ibusy_compat_ioctl(struct file *file, unsigned long arg)
+{
+	return au_ibusy(file->f_path.dentry->d_sb, compat_ptr(arg));
+}
+#endif
+
+/* ---------------------------------------------------------------------- */
+
 /*
  * change a branch permission
  */
@@ -1213,6 +1297,7 @@ int au_br_mod(struct super_block *sb, struct au_opt_mod *mod, int remount,
 	aufs_bindex_t bindex;
 	struct dentry *root;
 	struct au_branch *br;
+	struct au_br_fhsm *bf;
 
 	root = sb->s_root;
 	bindex = au_find_dbindex(root, mod->h_root);
@@ -1234,11 +1319,21 @@ int au_br_mod(struct super_block *sb, struct au_opt_mod *mod, int remount,
 	if (br->br_perm == mod->perm)
 		return 0; /* success */
 
+	/* pre-allocate for non-fhsm --> fhsm */
+	bf = NULL;
+	if (!au_br_fhsm(br->br_perm) && au_br_fhsm(mod->perm)) {
+		err = au_fhsm_br_alloc(br);
+		if (unlikely(err))
+			goto out;
+		bf = br->br_fhsm;
+		br->br_fhsm = NULL;
+	}
+
 	if (au_br_writable(br->br_perm)) {
 		/* remove whiteout base */
 		err = au_br_init_wh(sb, br, mod->perm);
 		if (unlikely(err))
-			goto out;
+			goto out_bf;
 
 		if (!au_br_writable(mod->perm)) {
 			/* rw --> ro, file might be mmapped */
@@ -1275,13 +1370,44 @@ int au_br_mod(struct super_block *sb, struct au_opt_mod *mod, int remount,
 		}
 	}
 	if (unlikely(err))
-		goto out;
+		goto out_bf;
+
+	if (au_br_fhsm(br->br_perm)) {
+		if (!au_br_fhsm(mod->perm)) {
+			/* fhsm --> non-fhsm */
+			au_br_fhsm_fin(br->br_fhsm);
+			au_kfree_rcu(br->br_fhsm);
+			br->br_fhsm = NULL;
+		}
+	} else if (au_br_fhsm(mod->perm))
+		/* non-fhsm --> fhsm */
+		br->br_fhsm = bf;
 
 	*do_refresh |= need_sigen_inc(br->br_perm, mod->perm);
 	br->br_perm = mod->perm;
 	goto out; /* success */
 
+out_bf:
+	au_kfree_try_rcu(bf);
 out:
 	AuTraceErr(err);
+	return err;
+}
+
+/* ---------------------------------------------------------------------- */
+
+int au_br_stfs(struct au_branch *br, struct aufs_stfs *stfs)
+{
+	int err;
+	struct kstatfs kstfs;
+
+	err = vfs_statfs(&br->br_path, &kstfs);
+	if (!err) {
+		stfs->f_blocks = kstfs.f_blocks;
+		stfs->f_bavail = kstfs.f_bavail;
+		stfs->f_files = kstfs.f_files;
+		stfs->f_ffree = kstfs.f_ffree;
+	}
+
 	return err;
 }

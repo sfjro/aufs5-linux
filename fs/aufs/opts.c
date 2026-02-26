@@ -59,6 +59,12 @@ static match_table_t brperm = {
 };
 
 static match_table_t brattr = {
+	/* general */
+	{AuBrAttr_COO_REG, AUFS_BRATTR_COO_REG},
+	{AuBrAttr_COO_ALL, AUFS_BRATTR_COO_ALL},
+#ifdef CONFIG_AUFS_FHSM
+	{AuBrAttr_FHSM, AUFS_BRATTR_FHSM},
+#endif
 #ifdef CONFIG_AUFS_XATTR
 	{AuBrAttr_ICEX, AUFS_BRATTR_ICEX},
 	{AuBrAttr_ICEX_SEC, AUFS_BRATTR_ICEX_SEC},
@@ -72,9 +78,9 @@ static match_table_t brattr = {
 	{AuBrRAttr_WH, AUFS_BRRATTR_WH},
 
 	/* rw branch */
+	{AuBrWAttr_MOO, AUFS_BRWATTR_MOO},
 	{AuBrWAttr_NoLinkWH, AUFS_BRWATTR_NLWH},
 
-	/* add more later */
 	{0, NULL}
 };
 
@@ -89,9 +95,11 @@ static int br_attr_val(char *str, match_table_t table, substring_t args[])
 		if (p)
 			*p = 0;
 		v = match_token(str, table, args);
-		if (v)
+		if (v) {
+			if (v & AuBrAttr_CMOO_Mask)
+				attr &= ~AuBrAttr_CMOO_Mask;
 			attr |= v;
-		else {
+		} else {
 			if (p)
 				*p = '+';
 			pr_warn("ignored branch attribute %s\n", str);
@@ -479,6 +487,10 @@ static int au_opt_simple(struct super_block *sb, struct au_opt *opt,
 			pr_warn_once("ignored nodio\n");
 		break;
 
+	case Opt_fhsm_sec:
+		au_fhsm_set(sbinfo, opt->fhsm_second);
+		break;
+
 	case Opt_diropq_a:
 		au_opt_set(sbinfo->si_mntflags, ALWAYS_DIROPQ);
 		break;
@@ -693,7 +705,7 @@ static int au_opt_xino(struct super_block *sb, struct au_opt *opt,
 int au_opts_verify(struct super_block *sb, unsigned long sb_flags,
 		   unsigned int pending)
 {
-	int err;
+	int err, fhsm;
 	aufs_bindex_t bindex, bbot;
 	unsigned char do_plink, skip, do_free, can_no_dreval;
 	struct au_branch *br;
@@ -724,6 +736,7 @@ int au_opts_verify(struct super_block *sb, unsigned long sb_flags,
 			     " by the permission bits on the lower branch\n");
 
 	err = 0;
+	fhsm = 0;
 	root = sb->s_root;
 	dir = d_inode(root);
 	do_plink = !!au_opt_test(sbinfo->si_mntflags, PLINK);
@@ -786,6 +799,11 @@ int au_opts_verify(struct super_block *sb, unsigned long sb_flags,
 			spin_unlock(&dentry->d_lock);
 		}
 
+		if (au_br_fhsm(br->br_perm)) {
+			fhsm++;
+			AuDebugOn(!br->br_fhsm);
+		}
+
 		if (skip)
 			continue;
 
@@ -808,6 +826,20 @@ int au_opts_verify(struct super_block *sb, unsigned long sb_flags,
 		au_fset_si(sbinfo, NO_DREVAL);
 	else
 		au_fclr_si(sbinfo, NO_DREVAL);
+
+	if (fhsm >= 2) {
+		au_fset_si(sbinfo, FHSM);
+		for (bindex = bbot; bindex >= 0; bindex--) {
+			br = au_sbr(sb, bindex);
+			if (au_br_fhsm(br->br_perm)) {
+				au_fhsm_set_bottom(sb, bindex);
+				break;
+			}
+		}
+	} else {
+		au_fclr_si(sbinfo, FHSM);
+		au_fhsm_set_bottom(sb, -1);
+	}
 
 	return err;
 }

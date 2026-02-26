@@ -98,6 +98,15 @@ config AUFS_XATTR
 	branch attributes for EA.
 	See detail in aufs.5.
 
+config AUFS_FHSM
+	bool "File-based Hierarchical Storage Management"
+	help
+	Hierarchical Storage Management (or HSM) is a well-known feature
+	in the storage world. Aufs provides this feature as file-based.
+	with multiple branches.
+	These multiple branches are prioritized, ie. the topmost one
+	should be the fastest drive and be used heavily.
+
 config AUFS_RDU
 	bool "Readdir in userspace"
 	help

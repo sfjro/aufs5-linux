@@ -48,6 +48,7 @@ static int epilog(struct inode *dir, aufs_bindex_t bindex,
 		IMustLock(dir);
 		au_dir_ts(dir, bindex);
 		inode_inc_iversion(dir);
+		au_fhsm_wrote(sb, bindex, /*force*/0);
 		return 0; /* success */
 	}
 
@@ -789,6 +790,7 @@ int aufs_link(struct dentry *src_dentry, struct inode *dir,
 		/* some filesystem calls d_drop() */
 		d_drop(dentry);
 	/* some filesystems consume an inode even hardlink */
+	au_fhsm_wrote(sb, a->bdst, /*force*/0);
 	goto out_unpin; /* success */
 
 out_revert:

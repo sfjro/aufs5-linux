@@ -76,6 +76,7 @@ static int au_fsctx_reconfigure(struct fs_context *fc)
 		au_dy_arefresh(do_dx);
 	}
 
+	au_fhsm_wrote_all(sb, /*force*/1); /* ?? */
 	aufs_write_unlock(root);
 
 out:
@@ -315,6 +316,9 @@ static void au_fsctx_dump(struct au_opts *opts)
 			AuDbg("copyup %d, %s\n", opt->wbr_copyup,
 				  au_optstr_wbr_copyup(opt->wbr_copyup));
 			break;
+		case Opt_fhsm_sec:
+			AuDbg("fhsm_sec %u\n", opt->fhsm_second);
+			break;
 
 		default:
 			AuDbg("type %d\n", opt->type);
@@ -379,6 +383,12 @@ const struct fs_parameter_spec aufs_fsctx_paramspec[] = {
 	fsparam_flag_no("dirren", Opt_dirren),
 #else
 	au_ignore_flag("dirren", Opt_ignore),
+#endif
+
+#ifdef CONFIG_AUFS_FHSM
+	fsparam_s32("fhsm_sec", Opt_fhsm_sec),
+#else
+	fsparam_s32("fhsm_sec", Opt_ignore),
 #endif
 
 	/* always | a | whiteouted | w */
@@ -954,6 +964,18 @@ static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *para
 			err = 0;
 		else
 			errorfc(fc, "wrong value, %s", param->key);
+		break;
+
+	case Opt_fhsm_sec:
+		if (unlikely(result.int_32 < 0)) {
+			errorfc(fc, "bad integer in %s\n", param->key);
+			break;
+		}
+		err = 0;
+		if (sysaufs_brs)
+			opt->fhsm_second = result.int_32;
+		else
+			warnfc(fc, "ignored %s %s", param->key, param->string);
 		break;
 
 	/* simple true/false flag */
