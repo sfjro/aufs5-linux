@@ -1,0 +1,17 @@
+
+# Copyright (C) 2005-2026 Junjiro R. Okajima
+
+Lookup in a Branch
+----------------------------------------------------------------------
+Since aufs has a character of sub-VFS (see Introduction), it operates
+lookup for branches as VFS does. It may be a heavy work. But almost all
+lookup operation in aufs is the simplest case, ie. lookup only an entry
+directly connected to its parent. Digging down the directory hierarchy
+is unnecessary. VFS has a function lookup_one_len() for that use, and
+aufs calls it.
+
+When a branch is a remote filesystem, aufs basically relies upon its
+->d_revalidate(), also aufs forces the hardest revalidate tests for
+them.
+For d_revalidate, aufs implements three levels of revalidate tests. See
+"Revalidate Dentry and UDBA" in detail.

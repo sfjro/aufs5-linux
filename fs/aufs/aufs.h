@@ -22,11 +22,14 @@
 
 #include "debug.h"
 
+#include "dcsub.h"
+#include "dentry.h"
 #include "fstype.h"
 #include "inode.h"
 #include "module.h"
 #include "rwsem.h"
 #include "super.h"
+#include "vfsub.h"
 /* add more later */
 
 #endif /* __KERNEL__ */
