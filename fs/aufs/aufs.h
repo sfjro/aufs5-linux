@@ -22,6 +22,7 @@
 
 #include "debug.h"
 
+#include "fstype.h"
 #include "inode.h"
 #include "module.h"
 #include "rwsem.h"
