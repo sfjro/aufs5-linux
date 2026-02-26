@@ -89,11 +89,19 @@ int vfsub_kern_path(const char *name, unsigned int flags, struct path *path);
 struct dentry *vfsub_lookup_one_len(const char *name, struct path *ppath,
 				    int len);
 
+struct vfsub_lkup_one_args {
+	struct dentry **errp;
+	const struct qstr *name;
+	struct path *ppath;
+};
+
 static inline struct dentry *vfsub_lkup_one(const struct qstr *name,
 					    struct path *ppath)
 {
 	return vfsub_lookup_one_len(name->name, ppath, name->len);
 }
+
+void vfsub_call_lkup_one(void *args);
 
 /* ---------------------------------------------------------------------- */
 
@@ -119,6 +127,8 @@ static inline void vfsub_mnt_drop_write(struct vfsmount *mnt)
 int vfsub_create(struct inode *dir, struct path *path, int mode,
 		 bool want_excl);
 int vfsub_link(struct dentry *src_dentry, struct inode *dir, struct path *path);
+struct dentry *vfsub_mkdir(struct inode *dir, struct path *path, int mode);
+int vfsub_rmdir(struct inode *dir, struct path *path);
 
 /* ---------------------------------------------------------------------- */
 
@@ -138,6 +148,8 @@ static inline loff_t vfsub_f_size_read(struct file *file)
 
 /* ---------------------------------------------------------------------- */
 
+int vfsub_sio_notify_change(struct path *path, struct iattr *ia);
+int vfsub_notify_change(const struct path *path, struct iattr *ia);
 int vfsub_unlink(struct inode *dir, const struct path *path, int force);
 
 #endif /* __KERNEL__ */

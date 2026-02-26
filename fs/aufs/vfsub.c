@@ -105,6 +105,12 @@ out:
 	return path.dentry;
 }
 
+void vfsub_call_lkup_one(void *args)
+{
+	struct vfsub_lkup_one_args *a = args;
+	*a->errp = vfsub_lkup_one(a->name, a->ppath);
+}
+
 /* ---------------------------------------------------------------------- */
 
 int vfsub_create(struct inode *dir, struct path *path, int mode, bool want_excl)
@@ -192,6 +198,83 @@ out:
 	return err;
 }
 
+struct dentry *vfsub_mkdir(struct inode *dir, struct path *path, int mode)
+{
+	int err, e;
+	struct dentry *d, *ret;
+	struct inode *inode;
+	struct mnt_idmap *idmap;
+	struct delegated_inode deleg = {};
+
+	IMustLock(dir);
+
+	d = path->dentry;
+	path->dentry = d->d_parent;
+	inode = d_inode(path->dentry);
+	err = security_path_mkdir(path, d, mode_strip_umask(inode, mode));
+	path->dentry = d;
+	ret = ERR_PTR(err);
+	if (unlikely(err))
+		goto out;
+
+	idmap = mnt_idmap(path->mnt);
+	do {
+		/* on error, vfs_mkdir() calls dput() */
+		/* and unlocks the parent dir. Ouch! */
+		dget(d);
+		lockdep_off();
+		ret = vfs_mkdir(idmap, dir, d, mode, &deleg);
+		if (IS_ERR(ret))
+			inode_lock(dir);
+		lockdep_on();
+		if (is_delegated(&deleg)) {
+			e = break_deleg_wait(&deleg);
+			if (!e)
+				continue;
+		}
+		break;
+	} while (1);
+	if (IS_ERR(ret))
+		goto out;
+	dput(d);
+
+out:
+	return ret;
+}
+
+int vfsub_rmdir(struct inode *dir, struct path *path)
+{
+	int err, e;
+	struct dentry *d;
+	struct mnt_idmap *idmap;
+	struct delegated_inode deleg = {};
+
+	IMustLock(dir);
+
+	d = path->dentry;
+	path->dentry = d->d_parent;
+	err = security_path_rmdir(path, d);
+	path->dentry = d;
+	if (unlikely(err))
+		goto out;
+
+	idmap = mnt_idmap(path->mnt);
+	do {
+		lockdep_off();
+		err = vfs_rmdir(idmap, dir, d, &deleg);
+		lockdep_on();
+		if (is_delegated(&deleg)) {
+			e = break_deleg_wait(&deleg);
+			if (!e)
+				continue;
+		}
+		break;
+	} while (1);
+
+out:
+	return err;
+}
+
 /* ---------------------------------------------------------------------- */
 
 /* todo: support mmap_sem? */
@@ -241,6 +324,77 @@ ssize_t vfsub_write_k(struct file *file, void *kbuf, size_t count, loff_t *ppos)
 	err = kernel_write(file, kbuf, count, ppos);
 	lockdep_on();
 	/* re-commit later */
+	return err;
+}
+
+/* ---------------------------------------------------------------------- */
+
+struct notify_change_args {
+	int *errp;
+	const struct path *path;
+	struct iattr *ia;
+};
+
+static void call_notify_change(void *args)
+{
+	struct notify_change_args *a = args;
+	struct inode *h_inode;
+	struct mnt_idmap *idmap;
+	struct delegated_inode deleg = {};
+
+	h_inode = d_inode(a->path->dentry);
+	IMustLock(h_inode);
+
+	*a->errp = -EPERM;
+	if (IS_IMMUTABLE(h_inode) || IS_APPEND(h_inode))
+		goto out;
+
+	idmap = mnt_idmap(a->path->mnt);
+	do {
+		lockdep_off();
+		*a->errp = notify_change(idmap, a->path->dentry, a->ia, &deleg);
+		lockdep_on();
+		if (is_delegated(&deleg)) {
+			int e;
+
+			e = break_deleg_wait(&deleg);
+			if (!e)
+				continue;
+		}
+		break;
+	} while (1);
+
+out:
+	AuTraceErr(*a->errp);
+}
+
+int vfsub_notify_change(const struct path *path, struct iattr *ia)
+{
+	int err;
+	struct notify_change_args args = {
+		.errp	= &err,
+		.path	= path,
+		.ia	= ia
+	};
+
+	call_notify_change(&args);
+
+	return err;
+}
+
+int vfsub_sio_notify_change(struct path *path, struct iattr *ia)
+{
+	int err, wkq_err;
+	struct notify_change_args args = {
+		.errp	= &err,
+		.path	= path,
+		.ia	= ia
+	};
+
+	wkq_err = au_wkq_wait(call_notify_change, &args);
+	if (unlikely(wkq_err))
+		err = wkq_err;
+
 	return err;
 }
 

@@ -14,6 +14,7 @@
 
 #include <linux/fs.h>
 #include <linux/magic.h>
+#include <linux/romfs_fs.h>
 
 static inline int au_test_aufs(struct super_block *sb)
 {
@@ -23,6 +24,32 @@ static inline int au_test_aufs(struct super_block *sb)
 static inline const char *au_sbtype(struct super_block *sb)
 {
 	return sb->s_type->name;
+}
+
+static inline int au_test_iso9660(struct super_block *sb __maybe_unused)
+{
+#if IS_ENABLED(CONFIG_ISO9660_FS)
+	return sb->s_magic == ISOFS_SUPER_MAGIC;
+#else
+	return 0;
+#endif
+}
+
+static inline int au_test_romfs(struct super_block *sb __maybe_unused)
+{
+#if IS_ENABLED(CONFIG_ROMFS_FS)
+	return sb->s_magic == ROMFS_MAGIC;
+#else
+	return 0;
+#endif
+}
+
+static inline int au_test_cramfs(struct super_block *sb __maybe_unused)
+{
+#if IS_ENABLED(CONFIG_CRAMFS)
+	return sb->s_magic == CRAMFS_MAGIC;
+#endif
+	return 0;
 }
 
 static inline int au_test_nfs(struct super_block *sb __maybe_unused)
@@ -124,6 +151,15 @@ static inline int au_test_securityfs(struct super_block *sb __maybe_unused)
 #endif
 }
 
+static inline int au_test_squashfs(struct super_block *sb __maybe_unused)
+{
+#if IS_ENABLED(CONFIG_SQUASHFS)
+	return sb->s_magic == SQUASHFS_MAGIC;
+#else
+	return 0;
+#endif
+}
+
 static inline int au_test_btrfs(struct super_block *sb __maybe_unused)
 {
 #if IS_ENABLED(CONFIG_BTRFS_FS)
@@ -211,6 +247,16 @@ static inline int au_test_fs_no_limit_nlink(struct super_block *sb)
 		|| au_test_ubifs(sb);
 }
 
+/*
+ * filesystems which sets S_NOATIME and S_NOCMTIME.
+ */
+static inline int au_test_fs_notime(struct super_block *sb)
+{
+	return au_test_nfs(sb)
+		|| au_test_ubifs(sb)
+		;
+}
+
 /* ---------------------------------------------------------------------- */
 
 /*
@@ -231,6 +277,17 @@ static inline int au_test_fs_trunc_xino(struct super_block *sb)
 {
 	return au_test_tmpfs(sb)
 		|| au_test_ramfs(sb);
+}
+
+/*
+ * test if the @sb is real-readonly.
+ */
+static inline int au_test_fs_rr(struct super_block *sb)
+{
+	return au_test_squashfs(sb)
+		|| au_test_iso9660(sb)
+		|| au_test_cramfs(sb)
+		|| au_test_romfs(sb);
 }
 
 #endif /* __KERNEL__ */

@@ -40,13 +40,18 @@ out:
 
 static match_table_t brperm = {
 	{AuBrPerm_RO, AUFS_BRPERM_RO},
-	/* add more later */
+	{AuBrPerm_RR, AUFS_BRPERM_RR},
+	{AuBrPerm_RW, AUFS_BRPERM_RW},
 	{0, NULL}
 };
 
 static match_table_t brattr = {
 	/* ro/rr branch */
 	{AuBrRAttr_WH, AUFS_BRRATTR_WH},
+
+	/* rw branch */
+	{AuBrWAttr_NoLinkWH, AUFS_BRWATTR_NLWH},
+
 	/* add more later */
 	{0, NULL}
 };
@@ -109,9 +114,10 @@ out:
 
 int au_br_perm_val(char *perm)
 {
-	int val;
+	int val, bad, sz;
 	char *p;
 	substring_t args[MAX_OPT_ARGS];
+	au_br_perm_str_t attr;
 
 	p = strchr(perm, '+');
 	if (p)
@@ -128,6 +134,24 @@ int au_br_perm_val(char *perm)
 		goto out;
 
 	val |= br_attr_val(p + 1, brattr, args);
+
+	bad = 0;
+	switch (val & AuBrPerm_Mask) {
+	case AuBrPerm_RO:
+	case AuBrPerm_RR:
+		bad = val & AuBrWAttr_Mask;
+		val &= ~AuBrWAttr_Mask;
+		break;
+	case AuBrPerm_RW:
+		bad = val & AuBrRAttr_Mask;
+		val &= ~AuBrRAttr_Mask;
+		break;
+	}
+	if (unlikely(bad)) {
+		sz = au_do_optstr_br_attr(&attr, bad);
+		AuDebugOn(!sz);
+		pr_warn("ignored branch attribute %s\n", attr.a);
+	}
 
 out:
 	return val;
@@ -177,9 +201,13 @@ int au_opt_add(struct au_opt *opt, char *opt_str, unsigned long sb_flags,
 
 	err = vfsub_kern_path(add->pathname, AuOpt_LkupDirFlags, &add->path);
 	if (!err) {
-		if (!p)
+		if (!p) {
 			add->perm = AuBrPerm_RO;
-			/* re-commit later */
+			if (au_test_fs_rr(add->path.dentry->d_sb))
+				add->perm = AuBrPerm_RR;
+			else if (!bindex && !(sb_flags & SB_RDONLY))
+				add->perm = AuBrPerm_RW;
+		}
 		opt->type = Opt_add;
 		goto out;
 	}
@@ -296,6 +324,92 @@ static int au_opt_xino(struct super_block *sb, struct au_opt *opt,
 	return err;
 }
 
+int au_opts_verify(struct super_block *sb, unsigned long sb_flags,
+		   unsigned int pending)
+{
+	int err;
+	aufs_bindex_t bindex, bbot;
+	unsigned char do_plink, skip, do_free;
+	struct au_branch *br;
+	struct au_wbr *wbr;
+	struct dentry *root;
+	struct inode *dir, *h_dir;
+	struct au_sbinfo *sbinfo;
+	struct au_hinode *hdir;
+
+	SiMustAnyLock(sb);
+
+	sbinfo = au_sbi(sb);
+
+	if (!(sb_flags & SB_RDONLY)) {
+		if (unlikely(!au_br_writable(au_sbr_perm(sb, 0))))
+			pr_warn("first branch should be rw\n");
+	}
+
+	err = 0;
+	root = sb->s_root;
+	dir = d_inode(root);
+	do_plink = !!au_opt_test(sbinfo->si_mntflags, PLINK);
+	bbot = au_sbbot(sb);
+	for (bindex = 0; !err && bindex <= bbot; bindex++) {
+		skip = 0;
+		h_dir = au_h_iptr(dir, bindex);
+		br = au_sbr(sb, bindex);
+		do_free = 0;
+
+		wbr = br->br_wbr;
+		if (wbr)
+			wbr_wh_read_lock(wbr);
+
+		if (!au_br_writable(br->br_perm)) {
+			do_free = !!wbr;
+			skip = (!wbr
+				|| (!wbr->wbr_whbase
+				    && !wbr->wbr_plink
+				    && !wbr->wbr_orph));
+		} else if (!au_br_wh_linkable(br->br_perm)) {
+			/* skip = (!br->br_whbase && !br->br_orph); */
+			skip = (!wbr || !wbr->wbr_whbase);
+			if (skip && wbr) {
+				if (do_plink)
+					skip = !!wbr->wbr_plink;
+				else
+					skip = !wbr->wbr_plink;
+			}
+		} else {
+			/* skip = (br->br_whbase && br->br_ohph); */
+			skip = (wbr && wbr->wbr_whbase);
+			if (skip) {
+				if (do_plink)
+					skip = !!wbr->wbr_plink;
+				else
+					skip = !wbr->wbr_plink;
+			}
+		}
+		if (wbr)
+			wbr_wh_read_unlock(wbr);
+
+		if (skip)
+			continue;
+
+		hdir = au_hi(dir, bindex);
+		inode_lock_nested(hdir->hi_inode, AuLsc_I_PARENT);
+		if (wbr)
+			wbr_wh_write_lock(wbr);
+		err = au_wh_init(br, sb);
+		if (wbr)
+			wbr_wh_write_unlock(wbr);
+		inode_unlock(hdir->hi_inode);
+
+		if (!err && do_free) {
+			au_kfree_rcu(wbr);
+			br->br_wbr = NULL;
+		}
+	}
+
+	return err;
+}
+
 int au_opts_mount(struct super_block *sb, struct au_opts *opts)
 {
 	int err;
@@ -342,6 +456,10 @@ int au_opts_mount(struct super_block *sb, struct au_opts *opts)
 	opt = opts->opt;
 	while (!err && opt->type != Opt_tail)
 		err = au_opt_xino(sb, opt++, &opt_xino, opts);
+	if (unlikely(err))
+		goto out;
+
+	err = au_opts_verify(sb, sb->s_flags, tmp);
 	if (unlikely(err))
 		goto out;
 
