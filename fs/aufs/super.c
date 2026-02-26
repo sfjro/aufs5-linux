@@ -269,6 +269,8 @@ static int aufs_show_options(struct seq_file *m, struct dentry *dentry)
 	AuUInt(RDBLK, rdblk, sbinfo->si_rdblk);
 	AuUInt(RDHASH, rdhash, sbinfo->si_rdhash);
 
+	AuBool(VERBOSE, verbose);
+
 out:
 	/* be sure to print "br:" last */
 	if (!sysaufs_brs) {
@@ -663,8 +665,8 @@ int au_alloc_root(struct super_block *sb)
 	if (IS_ERR(inode))
 		goto out;
 
-	inode->i_op = aufs_iop + AuIop_DIR;
-	inode->i_fop = &simple_dir_operations; /* replace later */
+	inode->i_op = aufs_iop + AuIop_DIR; /* with getattr by default */
+	inode->i_fop = &aufs_dir_fop;
 	inode->i_mode = S_IFDIR;
 	vfsub_inode_nlink_init(inode, 2);
 	unlock_new_inode(inode);

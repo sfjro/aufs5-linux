@@ -86,6 +86,8 @@ int aufs_release_nondir(struct inode *inode __maybe_unused, struct file *file)
 	struct file *h_file;
 
 	finfo = au_fi(file);
+	au_hbl_del(&finfo->fi_hlist,
+		   &au_sbi(file->f_path.dentry->d_sb)->si_files);
 	bindex = finfo->fi_btop;
 	if (bindex >= 0) {
 		if (au_test_mmapped(file)) {

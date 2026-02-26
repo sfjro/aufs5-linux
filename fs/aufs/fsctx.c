@@ -174,6 +174,7 @@ static void au_fsctx_dump(struct au_opts *opts)
 	/* reduce stack space */
 	union {
 		struct au_opt_add *add;
+		struct au_opt_del *del;
 		struct au_opt_xino *xino;
 		struct au_opt_xino_itrunc *xino_itrunc;
 		struct au_opt_wbr_create *create;
@@ -186,6 +187,25 @@ static void au_fsctx_dump(struct au_opts *opts)
 		case Opt_add:
 			u.add = &opt->add;
 			AuDbg("add {b%d, %s, 0x%x, %p}\n",
+				  u.add->bindex, u.add->pathname, u.add->perm,
+				  u.add->path.dentry);
+			break;
+		case Opt_del:
+			fallthrough;
+		case Opt_idel:
+			u.del = &opt->del;
+			AuDbg("del {%s, %p}\n",
+			      u.del->pathname, u.del->h_path.dentry);
+			break;
+		case Opt_append:
+			u.add = &opt->add;
+			AuDbg("append {b%d, %s, 0x%x, %p}\n",
+				  u.add->bindex, u.add->pathname, u.add->perm,
+				  u.add->path.dentry);
+			break;
+		case Opt_prepend:
+			u.add = &opt->add;
+			AuDbg("prepend {b%d, %s, 0x%x, %p}\n",
 				  u.add->bindex, u.add->pathname, u.add->perm,
 				  u.add->path.dentry);
 			break;
@@ -218,6 +238,7 @@ static void au_fsctx_dump(struct au_opts *opts)
 		au_fsctx_TF(trunc_xib);
 		au_fsctx_TF(plink);
 		au_fsctx_TF(dio);
+		au_fsctx_TF(verbose);
 		au_fsctx_TF(acl);
 #undef au_fsctx_TF
 
@@ -292,6 +313,15 @@ static void au_fsctx_dump(struct au_opts *opts)
 const struct fs_parameter_spec aufs_fsctx_paramspec[] = {
 	fsparam_string("br", Opt_br),
 
+	/* "add=%d:%s" or "ins=%d:%s" */
+	fsparam_string("add", Opt_add),
+	fsparam_string("ins", Opt_add),
+	fsparam_path("append", Opt_append),
+	fsparam_path("prepend", Opt_prepend),
+
+	fsparam_path("del", Opt_del),
+	/* fsparam_s32("idel", Opt_idel), */
+
 	fsparam_path("xino", Opt_xino),
 	fsparam_flag("noxino", Opt_noxino),
 	fsparam_flag_no("trunc_xino", Opt_trunc_xino),
@@ -315,6 +345,13 @@ const struct fs_parameter_spec aufs_fsctx_paramspec[] = {
 	fsparam_string("udba", Opt_udba),
 
 	fsparam_flag_no("dio", Opt_dio),
+
+	fsparam_flag_no("verbose", Opt_verbose),
+	fsparam_flag("v", Opt_verbose),
+	fsparam_flag("quiet", Opt_noverbose),
+	fsparam_flag("q", Opt_noverbose),
+	/* user-space may handle this */
+	fsparam_flag("silent", Opt_noverbose),
 
 	fsparam_s32("rdcache", Opt_rdcache),
 	/* "def" or s32 */
@@ -429,6 +466,57 @@ out:
 	AuTraceErr(err);
 	return err;
 }
+
+static int au_fsctx_parse_del(struct fs_context *fc, struct au_opt_del *del,
+			      struct fs_parameter *param)
+{
+	int err;
+
+	err = -ENOMEM;
+	/* will be freed by au_fsctx_free() */
+	del->pathname = kmemdup_nul(param->string, param->size, GFP_NOFS);
+	if (unlikely(!del->pathname))
+		goto out;
+	AuDbg("del %s\n", del->pathname);
+	err = vfsub_kern_path(del->pathname, AuOpt_LkupDirFlags, &del->h_path);
+	if (unlikely(err))
+		errorfc(fc, "lookup failed %s (%d)", del->pathname, err);
+
+out:
+	AuTraceErr(err);
+	return err;
+}
+
+#if 0 /* reserved for future use */
+static int au_fsctx_parse_idel(struct fs_context *fc, struct au_opt_del *del,
+			       aufs_bindex_t bindex)
+{
+	int err;
+	struct super_block *sb;
+	struct dentry *root;
+	struct au_fsctx_opts *a = fc->fs_private;
+
+	sb = a->sb;
+	AuDebugOn(!sb);
+
+	err = -EINVAL;
+	root = sb->s_root;
+	aufs_read_lock(root, AuLock_FLUSH);
+	if (bindex < 0 || au_sbbot(sb) < bindex) {
+		errorfc(fc, "out of bounds, %d", bindex);
+		goto out;
+	}
+
+	err = 0;
+	del->h_path.dentry = dget(au_h_dptr(root, bindex));
+	del->h_path.mnt = mntget(au_sbr_mnt(sb, bindex));
+
+out:
+	aufs_read_unlock(root, !AuLock_IR);
+	AuTraceErr(err);
+	return err;
+}
+#endif
 
 static int au_fsctx_parse_xino(struct fs_context *fc,
 			       struct au_opt_xino *xino,
@@ -557,6 +645,29 @@ static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *para
 	case Opt_add:
 		err = au_fsctx_parse_add(fc, param->string);
 		break;
+	case Opt_append:
+		err = au_fsctx_parse_do_add(fc, opt, param->string, param->size,
+					    /*dummy bindex*/1);
+		break;
+	case Opt_prepend:
+		err = au_fsctx_parse_do_add(fc, opt, param->string, param->size,
+					    /*bindex*/0);
+		break;
+
+	case Opt_del:
+		err = au_fsctx_parse_del(fc, &opt->del, param);
+		break;
+#if 0 /* reserved for future use */
+	case Opt_idel:
+		if (!a->sb) {
+			err = 0;
+			a->skipped = 1;
+			break;
+		}
+		del->pathname = "(indexed)";
+		err = au_opts_parse_idel(fc, &opt->del, result.uint_32);
+		break;
+#endif
 
 	case Opt_xino:
 		err = au_fsctx_parse_xino(fc, &opt->xino, param);
@@ -681,8 +792,15 @@ static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *para
 	au_fsctx_TF(trunc_xib);
 	au_fsctx_TF(plink);
 	au_fsctx_TF(dio);
+	au_fsctx_TF(verbose);
 	au_fsctx_TF(acl);
 #undef au_fsctx_TF
+
+	case Opt_noverbose:
+		err = 0;
+		opt->type = Opt_verbose;
+		opt->tf = false;
+		break;
 
 	case Opt_noxino:
 		fallthrough;
@@ -709,6 +827,8 @@ static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *para
 
 	switch (token) {
 	case Opt_br:
+		fallthrough;
+	case Opt_noverbose:
 		break;
 	default:
 		opt->type = token;
@@ -738,6 +858,11 @@ static inline unsigned int is_colonopt(char *str)
 		return sizeof(name) - 1
 	do_test("br");
 	do_test("add");
+	do_test("ins");
+	do_test("append");
+	do_test("prepend");
+	do_test("del");
+	/* do_test("idel"); */
 	/* add more later */
 #undef do_test
 
@@ -782,8 +907,18 @@ static void au_fsctx_opts_free(struct au_opts *opts)
 	while (opt->type != Opt_tail) {
 		switch (opt->type) {
 		case Opt_add:
+			fallthrough;
+		case Opt_append:
+			fallthrough;
+		case Opt_prepend:
 			kfree(opt->add.pathname);
 			path_put(&opt->add.path);
+			break;
+		case Opt_del:
+			kfree(opt->del.pathname);
+			fallthrough;
+		case Opt_idel:
+			path_put(&opt->del.h_path);
 			break;
 		case Opt_xino:
 			kfree(opt->xino.path);
