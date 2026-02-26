@@ -211,8 +211,10 @@ struct simple_arg {
 	int type;
 	union {
 		struct {
-			umode_t mode;
-			bool want_excl;
+			umode_t			mode;
+			bool			want_excl;
+			bool			try_aopen;
+			struct vfsub_aopen_args	*aopen;
 		} c;
 		struct {
 			const char *symname;
@@ -230,8 +232,13 @@ static int add_simple(struct inode *dir, struct dentry *dentry,
 	int err, rerr;
 	aufs_bindex_t btop;
 	unsigned char created;
+	const unsigned char try_aopen
+		= (arg->type == Creat && arg->u.c.try_aopen);
+	struct vfsub_aopen_args *aopen = arg->u.c.aopen;
 	struct dentry *wh_dentry, *parent;
 	struct inode *h_dir;
+	struct super_block *sb;
+	struct au_branch *br;
 	/* to reduce stack size */
 	struct {
 		struct au_dtime dt;
@@ -251,13 +258,16 @@ static int add_simple(struct inode *dir, struct dentry *dentry,
 	a->wr_dir_args.flags = AuWrDir_ADD_ENTRY;
 
 	parent = dentry->d_parent; /* dir inode is locked */
-	err = aufs_read_lock(dentry, AuLock_DW | AuLock_GEN);
-	if (unlikely(err))
-		goto out_free;
+	if (!try_aopen) {
+		err = aufs_read_lock(dentry, AuLock_DW | AuLock_GEN);
+		if (unlikely(err))
+			goto out_free;
+	}
 	err = au_d_may_add(dentry);
 	if (unlikely(err))
 		goto out_unlock;
-	di_write_lock_parent(parent);
+	if (!try_aopen)
+		di_write_lock_parent(parent);
 	wh_dentry = lock_hdir_lkup_wh(dentry, &a->dt, /*src_dentry*/NULL,
 				      &a->pin, &a->wr_dir_args);
 	err = PTR_ERR(wh_dentry);
@@ -265,30 +275,49 @@ static int add_simple(struct inode *dir, struct dentry *dentry,
 		goto out_parent;
 
 	btop = au_dbtop(dentry);
+	sb = dentry->d_sb;
+	br = au_sbr(sb, btop);
 	a->h_path.dentry = au_h_dptr(dentry, btop);
-	a->h_path.mnt = au_sbr_mnt(dentry->d_sb, btop);
+	a->h_path.mnt = au_br_mnt(br);
 	h_dir = au_pinned_h_dir(&a->pin);
 	switch (arg->type) {
 	case Creat:
-		err = vfsub_create(h_dir, &a->h_path, arg->u.c.mode,
-				   arg->u.c.want_excl);
+		if (!try_aopen || !h_dir->i_op->atomic_open) {
+			err = vfsub_create(h_dir, &a->h_path, arg->u.c.mode,
+					   arg->u.c.want_excl);
+			created = !err;
+			if (!err && try_aopen)
+				aopen->file->f_mode |= FMODE_CREATED;
+		} else {
+			aopen->br = br;
+			err = vfsub_atomic_open(h_dir, a->h_path.dentry, aopen);
+			AuDbg("err %d\n", err);
+			AuDbgFile(aopen->file);
+			created = err >= 0
+				&& !!(aopen->file->f_mode & FMODE_CREATED);
+		}
 		break;
 	case Symlink:
 		err = vfsub_symlink(h_dir, &a->h_path, arg->u.s.symname);
+		created = !err;
 		break;
 	case Mknod:
 		err = vfsub_mknod(h_dir, &a->h_path, arg->u.m.mode,
 				  arg->u.m.dev);
+		created = !err;
 		break;
 	default:
 		BUG();
 	}
-	created = !err;
+	if (unlikely(err < 0))
+		goto out_unpin;
+
+	err = epilog(dir, btop, wh_dentry, dentry);
 	if (!err)
-		err = epilog(dir, btop, wh_dentry, dentry);
+		goto out_unpin; /* success */
 
 	/* revert */
-	if (unlikely(created && err && d_is_positive(a->h_path.dentry))) {
+	if (created /* && d_is_positive(a->h_path.dentry) */) {
 		rerr = vfsub_unlink(h_dir, &a->h_path, /*force*/0);
 		if (rerr) {
 			AuIOErr("%pd revert failure(%d, %d)\n",
@@ -297,18 +326,24 @@ static int add_simple(struct inode *dir, struct dentry *dentry,
 		}
 		au_dtime_revert(&a->dt);
 	}
+	if (try_aopen && h_dir->i_op->atomic_open
+	    && (aopen->file->f_mode & FMODE_OPENED))
+		/* aopen->file is still opened */
+		au_lcnt_dec(&aopen->br->br_nfiles);
 
+out_unpin:
 	au_unpin(&a->pin);
 	dput(wh_dentry);
-
 out_parent:
-	di_write_unlock(parent);
+	if (!try_aopen)
+		di_write_unlock(parent);
 out_unlock:
 	if (unlikely(err)) {
 		au_update_dbtop(dentry);
 		d_drop(dentry);
 	}
-	aufs_read_unlock(dentry, AuLock_DW);
+	if (!try_aopen)
+		aufs_read_unlock(dentry, AuLock_DW);
 out_free:
 	au_kfree_rcu(a);
 out:
@@ -346,6 +381,21 @@ int aufs_create(struct mnt_idmap *idmap, struct inode *dir,
 		.u.c = {
 			.mode		= mode,
 			.want_excl	= want_excl
+		}
+	};
+	return add_simple(dir, dentry, &arg);
+}
+
+int au_aopen_or_create(struct inode *dir, struct dentry *dentry,
+		       struct vfsub_aopen_args *aopen_args)
+{
+	struct simple_arg arg = {
+		.type = Creat,
+		.u.c = {
+			.mode		= aopen_args->create_mode,
+			.want_excl	= aopen_args->open_flag & O_EXCL,
+			.try_aopen	= true,
+			.aopen		= aopen_args
 		}
 	};
 	return add_simple(dir, dentry, &arg);

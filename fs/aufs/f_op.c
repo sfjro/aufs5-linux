@@ -7,15 +7,16 @@
  * file and vm operations
  */
 
+#include <linux/aio.h>
 #include <linux/fs_stack.h>
 #include <linux/mman.h>
+#include <linux/security.h>
 #include "aufs.h"
 
-int au_do_open_nondir(struct file *file, int flags)
+int au_do_open_nondir(struct file *file, int flags, struct file *h_file)
 {
 	int err;
 	aufs_bindex_t bindex;
-	struct file *h_file;
 	struct dentry *dentry;
 	struct au_finfo *finfo;
 	struct inode *h_inode;
@@ -24,11 +25,15 @@ int au_do_open_nondir(struct file *file, int flags)
 
 	err = 0;
 	dentry = file->f_path.dentry;
+	AuDebugOn(IS_ERR_OR_NULL(dentry));
 	finfo = au_fi(file);
 	memset(&finfo->fi_htop, 0, sizeof(finfo->fi_htop));
 	atomic_set(&finfo->fi_mmapped, 0);
 	bindex = au_dbtop(dentry);
-	h_file = au_h_open(dentry, bindex, flags, file);
+	if (!h_file)
+		h_file = au_h_open(dentry, bindex, flags, file);
+	else
+		get_file(h_file);
 	if (IS_ERR(h_file))
 		err = PTR_ERR(h_file);
 	else {
@@ -98,6 +103,58 @@ int aufs_release_nondir(struct inode *inode __maybe_unused, struct file *file)
 
 /* ---------------------------------------------------------------------- */
 
+static int au_do_flush_nondir(struct file *file, fl_owner_t id)
+{
+	int err;
+	struct file *h_file;
+
+	err = 0;
+	h_file = au_hf_top(file);
+	if (h_file)
+		err = vfsub_flush(h_file, id);
+	return err;
+}
+
+static int aufs_flush_nondir(struct file *file, fl_owner_t id)
+{
+	return au_do_flush(file, id, au_do_flush_nondir);
+}
+
+/* ---------------------------------------------------------------------- */
+/*
+ * read and write functions acquire [fdi]_rwsem once, but release before
+ * mmap_sem. This is because to stop a race condition between mmap(2).
+ * Releasing these aufs-rwsem should be safe, no branch-management (by keeping
+ * si_rwsem), no harmful copy-up should happen. Actually copy-up may happen in
+ * read functions after [fdi]_rwsem are released, but it should be harmless.
+ */
+
+/* Callers should call au_read_post() or fput() in the end */
+struct file *au_read_pre(struct file *file, int keep_fi, unsigned int lsc)
+{
+	struct file *h_file;
+	int err;
+
+	err = au_reval_and_lock_fdi(file, au_reopen_nondir, /*wlock*/0, lsc);
+	if (!err) {
+		di_read_unlock(file->f_path.dentry, AuLock_IR);
+		h_file = au_hf_top(file);
+		get_file(h_file);
+		if (!keep_fi)
+			fi_read_unlock(file);
+	} else
+		h_file = ERR_PTR(err);
+
+	return h_file;
+}
+
+static void au_read_post(struct inode *inode, struct file *h_file)
+{
+	/* update without lock, I don't think it a problem */
+	fsstack_copy_attr_atime(inode, file_inode(h_file));
+	fput(h_file);
+}
+
 struct au_write_pre {
 	/* input */
 	unsigned int lsc;
@@ -149,16 +206,327 @@ static struct file *au_write_pre(struct file *file, int do_ready,
 	if (do_ready)
 		au_unpin(&pin);
 	di_read_unlock(dentry, /*flags*/0);
-#if 0 /* re-commit later */
 	if (do_ready)
 		vfsub_file_start_write(h_file);
-#endif
 
 out_fi:
 	fi_write_unlock(file);
 out:
 	return h_file;
 }
+
+static void au_write_post(struct inode *inode, struct file *h_file,
+			  struct au_write_pre *wpre)
+{
+	struct inode *h_inode;
+
+	vfsub_file_end_write(h_file);
+	au_cpup_attr_timesizes(inode);
+	AuDebugOn(au_ibtop(inode) != wpre->btop);
+	h_inode = file_inode(h_file);
+	inode->i_mode = h_inode->i_mode;
+	ii_write_unlock(inode);
+	fput(h_file);
+}
+
+/*
+ * todo: very ugly
+ * it locks both of i_mutex and si_rwsem for read in safe.
+ * if the plink maintenance mode continues forever (that is the problem),
+ * may loop forever.
+ */
+static void au_mtx_and_read_lock(struct inode *inode)
+{
+	int err;
+	struct super_block *sb = inode->i_sb;
+
+	while (1) {
+		inode_lock(inode);
+		err = si_read_lock(sb, AuLock_FLUSH | AuLock_NOPLM);
+		if (!err)
+			break;
+		inode_unlock(inode);
+		si_read_lock(sb, AuLock_NOPLMW);
+		si_read_unlock(sb);
+	}
+}
+
+static ssize_t au_do_iter(struct file *h_file, int rw, struct kiocb *kio,
+			  struct iov_iter *iov_iter)
+{
+	ssize_t err;
+	struct file *file;
+	ssize_t (*iter)(struct kiocb *, struct iov_iter *);
+
+	err = security_file_permission(h_file, rw);
+	if (unlikely(err))
+		goto out;
+
+	err = -ENOSYS;	/* the branch doesn't have its ->(read|write)_iter() */
+	iter = NULL;
+	if (rw == MAY_READ)
+		iter = h_file->f_op->read_iter;
+	else if (rw == MAY_WRITE)
+		iter = h_file->f_op->write_iter;
+
+	file = kio->ki_filp;
+	kio->ki_filp = h_file;
+	if (iter) {
+		lockdep_off();
+		err = iter(kio, iov_iter);
+		lockdep_on();
+	} else
+		/* currently there is no such fs */
+		WARN_ON_ONCE(1);
+	if (!is_sync_kiocb(kio)) {
+		/* do not restore ki_filp */
+		fput(file);
+		get_file(h_file);
+	} else
+		kio->ki_filp = file;
+
+out:
+	return err;
+}
+
+static ssize_t aufs_read_iter(struct kiocb *kio, struct iov_iter *iov_iter)
+{
+	ssize_t err;
+	struct file *file, *h_file;
+	struct inode *inode;
+	struct super_block *sb;
+
+	file = kio->ki_filp;
+	inode = file_inode(file);
+	sb = inode->i_sb;
+	si_read_lock(sb, AuLock_FLUSH | AuLock_NOPLMW);
+
+	h_file = au_read_pre(file, /*keep_fi*/1, /*lsc*/0);
+	err = PTR_ERR(h_file);
+	if (IS_ERR(h_file))
+		goto out;
+
+	fi_read_unlock(file);
+
+	err = au_do_iter(h_file, MAY_READ, kio, iov_iter);
+	/* todo: necessary? */
+	/* file->f_ra = h_file->f_ra; */
+	au_read_post(inode, h_file);
+
+out:
+	si_read_unlock(sb);
+	return err;
+}
+
+static ssize_t aufs_write_iter(struct kiocb *kio, struct iov_iter *iov_iter)
+{
+	ssize_t err;
+	struct au_write_pre wpre;
+	struct inode *inode;
+	struct file *file, *h_file;
+
+	file = kio->ki_filp;
+	inode = file_inode(file);
+	au_mtx_and_read_lock(inode);
+
+	wpre.lsc = 0;
+	h_file = au_write_pre(file, /*do_ready*/1, &wpre);
+	err = PTR_ERR(h_file);
+	if (IS_ERR(h_file))
+		goto out;
+	if (!is_sync_kiocb(kio)) {
+		/* .vs. sb_start_write() in aio_write() */
+		if (S_ISREG(inode->i_mode))
+			__sb_writers_acquired(inode->i_sb, SB_FREEZE_WRITE);
+		file_end_write(file);
+	}
+	err = au_do_iter(h_file, MAY_WRITE, kio, iov_iter);
+	au_write_post(inode, h_file, &wpre);
+
+out:
+	si_read_unlock(inode->i_sb);
+	inode_unlock(inode);
+	return err;
+}
+
+/*
+ * We may be able to remove aufs_splice_{read,write}() since almost all FSes
+ * don't have their own .splice_{read,write} implimentations, and they use
+ * generic_file_splice_read() and iter_file_splice_write() who can act like the
+ * simple converters to f_op->iter_read() and ->iter_write().
+ * But we keep our own implementations because some non-mainlined FSes may have
+ * their own .splice_{read,write} implimentations and aufs doesn't want to take
+ * away an opportunity to co-work with aufs from them.
+ */
+static ssize_t aufs_splice_read(struct file *file, loff_t *ppos,
+				struct pipe_inode_info *pipe, size_t len,
+				unsigned int flags)
+{
+	ssize_t err;
+	struct file *h_file;
+	struct inode *inode;
+	struct super_block *sb;
+
+	inode = file_inode(file);
+	sb = inode->i_sb;
+	si_read_lock(sb, AuLock_FLUSH | AuLock_NOPLMW);
+
+	h_file = au_read_pre(file, /*keep_fi*/0, /*lsc*/0);
+	err = PTR_ERR(h_file);
+	if (IS_ERR(h_file))
+		goto out;
+
+	err = vfsub_splice_read(h_file, ppos, pipe, len, flags);
+	/* todo: necessary? */
+	/* file->f_ra = h_file->f_ra; */
+	au_read_post(inode, h_file);
+
+out:
+	si_read_unlock(sb);
+	return err;
+}
+
+static ssize_t
+aufs_splice_write(struct pipe_inode_info *pipe, struct file *file, loff_t *ppos,
+		  size_t len, unsigned int flags)
+{
+	ssize_t err;
+	struct au_write_pre wpre;
+	struct inode *inode;
+	struct file *h_file;
+
+	inode = file_inode(file);
+	au_mtx_and_read_lock(inode);
+
+	wpre.lsc = 0;
+	h_file = au_write_pre(file, /*do_ready*/1, &wpre);
+	err = PTR_ERR(h_file);
+	if (IS_ERR(h_file))
+		goto out;
+
+	err = vfsub_splice_from(pipe, h_file, ppos, len, flags);
+	au_write_post(inode, h_file, &wpre);
+
+out:
+	si_read_unlock(inode->i_sb);
+	inode_unlock(inode);
+	return err;
+}
+
+static long aufs_fallocate(struct file *file, int mode, loff_t offset,
+			   loff_t len)
+{
+	long err;
+	struct au_write_pre wpre;
+	struct inode *inode;
+	struct file *h_file;
+
+	inode = file_inode(file);
+	au_mtx_and_read_lock(inode);
+
+	wpre.lsc = 0;
+	h_file = au_write_pre(file, /*do_ready*/1, &wpre);
+	err = PTR_ERR(h_file);
+	if (IS_ERR(h_file))
+		goto out;
+
+	lockdep_off();
+	err = vfs_fallocate(h_file, mode, offset, len);
+	lockdep_on();
+	/*
+	 * we don't need to call file_modifed() here since au_write_post()
+	 * is equivalent and copies-up all timestamps and permission bits.
+	 */
+	au_write_post(inode, h_file, &wpre);
+
+out:
+	si_read_unlock(inode->i_sb);
+	inode_unlock(inode);
+	return err;
+}
+
+static ssize_t aufs_copy_file_range(struct file *src, loff_t src_pos,
+				    struct file *dst, loff_t dst_pos,
+				    size_t len, unsigned int flags)
+{
+	ssize_t err;
+	struct au_write_pre wpre;
+	enum { SRC, DST };
+	struct {
+		struct inode *inode;
+		struct file *h_file;
+		struct super_block *h_sb;
+	} a[2];
+#define a_src	a[SRC]
+#define a_dst	a[DST]
+
+	err = -EINVAL;
+	a_src.inode = file_inode(src);
+	if (unlikely(!S_ISREG(a_src.inode->i_mode)))
+		goto out;
+	a_dst.inode = file_inode(dst);
+	if (unlikely(!S_ISREG(a_dst.inode->i_mode)))
+		goto out;
+
+	au_mtx_and_read_lock(a_dst.inode);
+	/*
+	 * in order to match the order in di_write_lock2_{child,parent}(),
+	 * use f_path.dentry for this comparison.
+	 */
+	if (src->f_path.dentry < dst->f_path.dentry) {
+		a_src.h_file = au_read_pre(src, /*keep_fi*/1, AuLsc_FI_1);
+		err = PTR_ERR(a_src.h_file);
+		if (IS_ERR(a_src.h_file))
+			goto out_si;
+
+		wpre.lsc = AuLsc_FI_2;
+		a_dst.h_file = au_write_pre(dst, /*do_ready*/1, &wpre);
+		err = PTR_ERR(a_dst.h_file);
+		if (IS_ERR(a_dst.h_file)) {
+			au_read_post(a_src.inode, a_src.h_file);
+			goto out_si;
+		}
+	} else {
+		wpre.lsc = AuLsc_FI_1;
+		a_dst.h_file = au_write_pre(dst, /*do_ready*/1, &wpre);
+		err = PTR_ERR(a_dst.h_file);
+		if (IS_ERR(a_dst.h_file))
+			goto out_si;
+
+		a_src.h_file = au_read_pre(src, /*keep_fi*/1, AuLsc_FI_2);
+		err = PTR_ERR(a_src.h_file);
+		if (IS_ERR(a_src.h_file)) {
+			au_write_post(a_dst.inode, a_dst.h_file, &wpre);
+			goto out_si;
+		}
+	}
+
+	err = -EXDEV;
+	a_src.h_sb = file_inode(a_src.h_file)->i_sb;
+	a_dst.h_sb = file_inode(a_dst.h_file)->i_sb;
+	if (unlikely(a_src.h_sb != a_dst.h_sb)) {
+		AuDbgFile(src);
+		AuDbgFile(dst);
+		goto out_file;
+	}
+
+	err = vfsub_copy_file_range(a_src.h_file, src_pos, a_dst.h_file,
+				    dst_pos, len, flags);
+
+out_file:
+	au_write_post(a_dst.inode, a_dst.h_file, &wpre);
+	fi_read_unlock(src);
+	au_read_post(a_src.inode, a_src.h_file);
+out_si:
+	si_read_unlock(a_dst.inode->i_sb);
+	inode_unlock(a_dst.inode);
+out:
+	return err;
+#undef a_src
+#undef a_dst
+}
+
+/* ---------------------------------------------------------------------- */
 
 /*
  * The locking order around current->mmap_sem.
@@ -272,10 +640,107 @@ out:
 
 /* ---------------------------------------------------------------------- */
 
+static int aufs_fsync_nondir(struct file *file, loff_t start, loff_t end,
+			     int datasync)
+{
+	int err;
+	struct au_write_pre wpre;
+	struct inode *inode;
+	struct file *h_file;
+
+	err = 0; /* -EBADF; */ /* posix? */
+	if (unlikely(!(file->f_mode & FMODE_WRITE)))
+		goto out;
+
+	inode = file_inode(file);
+	au_mtx_and_read_lock(inode);
+
+	wpre.lsc = 0;
+	h_file = au_write_pre(file, /*do_ready*/1, &wpre);
+	err = PTR_ERR(h_file);
+	if (IS_ERR(h_file))
+		goto out_unlock;
+
+	err = vfsub_fsync(h_file, &h_file->f_path, datasync);
+	au_write_post(inode, h_file, &wpre);
+
+out_unlock:
+	si_read_unlock(inode->i_sb);
+	inode_unlock(inode);
+out:
+	return err;
+}
+
+static int aufs_fasync(int fd, struct file *file, int flag)
+{
+	int err;
+	struct file *h_file;
+	struct super_block *sb;
+
+	sb = file->f_path.dentry->d_sb;
+	si_read_lock(sb, AuLock_FLUSH | AuLock_NOPLMW);
+
+	h_file = au_read_pre(file, /*keep_fi*/0, /*lsc*/0);
+	err = PTR_ERR(h_file);
+	if (IS_ERR(h_file))
+		goto out;
+
+	if (h_file->f_op->fasync)
+		err = h_file->f_op->fasync(fd, h_file, flag);
+	fput(h_file); /* instead of au_read_post() */
+
+out:
+	si_read_unlock(sb);
+	return err;
+}
+
+static int aufs_setfl(struct file *file, unsigned long arg)
+{
+	int err;
+	struct file *h_file;
+	struct super_block *sb;
+
+	sb = file->f_path.dentry->d_sb;
+	si_read_lock(sb, AuLock_FLUSH | AuLock_NOPLMW);
+
+	h_file = au_read_pre(file, /*keep_fi*/0, /*lsc*/0);
+	err = PTR_ERR(h_file);
+	if (IS_ERR(h_file))
+		goto out;
+
+	/* stop calling h_file->fasync */
+	arg |= vfsub_file_flags(file) & FASYNC;
+	err = setfl(/*unused fd*/-1, h_file, arg);
+	fput(h_file); /* instead of au_read_post() */
+
+out:
+	si_read_unlock(sb);
+	return err;
+}
+
+/* ---------------------------------------------------------------------- */
+
 const struct file_operations aufs_file_fop = {
 	.owner		= THIS_MODULE,
 
+	.llseek		= default_llseek,
+
+	.read_iter	= aufs_read_iter,
+	.write_iter	= aufs_write_iter,
+
 	.mmap		= aufs_mmap,
 	.open		= aufs_open_nondir,
-	.release	= aufs_release_nondir
+	.flush		= aufs_flush_nondir,
+	.release	= aufs_release_nondir,
+	.fsync		= aufs_fsync_nondir,
+	.fasync		= aufs_fasync,
+	.setfl		= aufs_setfl,
+	.splice_write	= aufs_splice_write,
+	.splice_read	= aufs_splice_read,
+#if 0 /* reserved for future use */
+	.aio_splice_write = aufs_aio_splice_write,
+	.aio_splice_read  = aufs_aio_splice_read,
+#endif
+	.fallocate	= aufs_fallocate,
+	.copy_file_range = aufs_copy_file_range
 };
