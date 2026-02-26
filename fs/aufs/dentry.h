@@ -25,7 +25,9 @@ struct au_dinfo {
 
 	struct au_rwsem		di_rwsem;
 	aufs_bindex_t		di_btop, di_bbot, di_bwh, di_bdiropq;
+	unsigned char		di_tmpfile; /* to allow the different name */
 	struct au_hdentry	*di_hdentry;
+	struct file		*di_htmpfile;
 	struct rcu_head		rcu;
 } ____cacheline_aligned_in_smp;
 
@@ -79,8 +81,12 @@ void di_read_unlock(struct dentry *d, int flags);
 void di_downgrade_lock(struct dentry *d, int flags);
 void di_write_lock(struct dentry *d, unsigned int lsc);
 void di_write_unlock(struct dentry *d);
+void di_write_lock2_child(struct dentry *d1, struct dentry *d2, int isdir);
+void di_write_lock2_parent(struct dentry *d1, struct dentry *d2, int isdir);
+void di_write_unlock2(struct dentry *d1, struct dentry *d2);
 
 struct dentry *au_h_dptr(struct dentry *dentry, aufs_bindex_t bindex);
+struct dentry *au_h_d_alias(struct dentry *dentry, aufs_bindex_t bindex);
 aufs_bindex_t au_dbtail(struct dentry *dentry);
 aufs_bindex_t au_dbtaildir(struct dentry *dentry);
 
@@ -89,6 +95,7 @@ void au_set_h_dptr(struct dentry *dentry, aufs_bindex_t bindex,
 int au_digen_test(struct dentry *dentry, unsigned int sigen);
 int au_dbrange_test(struct dentry *dentry);
 void au_update_digen(struct dentry *dentry);
+void au_update_dbrange(struct dentry *dentry, int do_put_zero);
 void au_update_dbtop(struct dentry *dentry);
 void au_update_dbbot(struct dentry *dentry);
 int au_find_dbindex(struct dentry *dentry, struct dentry *h_dentry);

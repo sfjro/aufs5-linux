@@ -719,7 +719,7 @@ int au_refresh_dentry(struct dentry *dentry, struct dentry *parent)
 	if (!ebrange)
 		ebrange = au_do_refresh_hdentry(dentry, parent);
 
-	if (d_unhashed(dentry) || ebrange) {
+	if (d_unhashed(dentry) || ebrange /* || dinfo->di_tmpfile */) {
 		AuDebugOn(au_dbtop(dentry) < 0 && au_dbbot(dentry) >= 0);
 		if (d_really_is_positive(dentry)) {
 			inode = d_inode(dentry);
@@ -813,7 +813,7 @@ static int h_d_revalidate(struct au_d_reval_args *args, struct inode *inode,
 	int err;
 	umode_t mode, h_mode;
 	aufs_bindex_t bindex, btail, btop, ibs, ibe, bwh;
-	unsigned char plus, unhashed, is_root, h_plus, h_nfs;
+	unsigned char plus, unhashed, is_root, h_plus, h_nfs, tmpfile;
 	struct inode *h_inode, *h_cached_inode;
 	struct dentry *h_parent, *dentry = args->dentry;
 	const struct qstr *h_name, *qname = args->qname;
@@ -829,6 +829,7 @@ static int h_d_revalidate(struct au_d_reval_args *args, struct inode *inode,
 	ibe = -1;
 	unhashed = !!d_unhashed(dentry);
 	is_root = !!IS_ROOT(dentry);
+	tmpfile = au_di(dentry)->di_tmpfile;
 
 	/*
 	 * Theoretically, REVAL test should be unnecessary in case of
@@ -879,7 +880,8 @@ static int h_d_revalidate(struct au_d_reval_args *args, struct inode *inode,
 				     && !is_root
 				     && ((!h_nfs
 					  && (unhashed != !!d_unhashed(h_args.dentry)
-					      || !au_qstreq(qname, h_name)
+					      || (!tmpfile
+						  && !au_qstreq(qname, h_name))
 						  ))
 					 || (h_nfs
 					     && !(h_args.flags & LOOKUP_OPEN)
@@ -933,7 +935,7 @@ static int h_d_revalidate(struct au_d_reval_args *args, struct inode *inode,
 			h_cached_inode = au_h_iptr(inode, bindex);
 
 		if (!h_nfs) {
-			if (unlikely(plus != h_plus))
+			if (unlikely(plus != h_plus && !tmpfile))
 				goto err;
 		} else {
 			if (unlikely(!(h_args.dentry->d_flags & DCACHE_NFSFS_RENAMED)
@@ -1085,7 +1087,7 @@ static int au_do_d_reval(struct au_d_reval_args *args)
 	    && inode
 	    && (IS_DEADDIR(inode)
 		|| (!vfsub_inode_nlink(inode, AU_I_AUFS)
-		    /*&& !au_ii(inode)->ii_tmpfile*/))
+		    && !au_ii(inode)->ii_tmpfile))
 		) {
 		AuTraceErr(err);
 		goto out_inval;

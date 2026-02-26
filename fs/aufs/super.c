@@ -651,7 +651,7 @@ int au_alloc_root(struct super_block *sb)
 	if (IS_ERR(inode))
 		goto out;
 
-	inode->i_op = &simple_dir_inode_operations; /* replace later */
+	inode->i_op = aufs_iop + AuIop_DIR;
 	inode->i_fop = &simple_dir_operations; /* replace later */
 	inode->i_mode = S_IFDIR;
 	vfsub_inode_nlink_init(inode, 2);
@@ -718,7 +718,12 @@ out:
 
 struct file_system_type aufs_fs_type = {
 	.name		= AUFS_FSTYPE,
-	.fs_flags	= FS_MGTIME,
+	/* a race between rename and others */
+	.fs_flags	= FS_RENAME_DOES_D_MOVE
+				| FS_MGTIME
+				/* untested */
+				/*| FS_ALLOW_IDMAP*/
+				,
 	.init_fs_context = aufs_fsctx_init,
 	.parameters	= aufs_fsctx_paramspec,
 	.kill_sb	= aufs_kill_sb,

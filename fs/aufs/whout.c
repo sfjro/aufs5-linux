@@ -162,6 +162,37 @@ out:
 	return dentry;
 }
 
+/*
+ * rename the @h_dentry on @br to the whiteouted temporary name.
+ */
+int au_whtmp_ren(struct dentry *h_dentry, struct au_branch *br)
+{
+	int err;
+	struct path h_path = {
+		.mnt = au_br_mnt(br)
+	};
+	struct inode *h_dir;
+	struct dentry *h_parent;
+
+	h_parent = h_dentry->d_parent; /* dir inode is locked */
+	h_dir = d_inode(h_parent);
+	IMustLock(h_dir);
+
+	h_path.dentry = au_whtmp_lkup(h_parent, br, &h_dentry->d_name);
+	err = PTR_ERR(h_path.dentry);
+	if (IS_ERR(h_path.dentry))
+		goto out;
+
+	/* under the same dir, no need to lock_rename() */
+	err = vfsub_rename(h_dir, h_dentry, h_dir, &h_path, /*flags*/0);
+	AuTraceErr(err);
+	dput(h_path.dentry);
+
+out:
+	AuTraceErr(err);
+	return err;
+}
+
 /* ---------------------------------------------------------------------- */
 /*
  * functions for removing a whiteout
@@ -189,6 +220,26 @@ int au_wh_unlink_dentry(struct inode *h_dir, struct path *h_path,
 	err = do_unlink_wh(h_dir, h_path);
 	if (!err && dentry)
 		au_set_dbwh(dentry, -1);
+
+	return err;
+}
+
+static int unlink_wh_name(struct path *h_ppath, struct qstr *wh)
+{
+	int err;
+	struct path h_path;
+
+	err = 0;
+	h_path.dentry = vfsub_lkup_one(wh, h_ppath);
+	if (IS_ERR(h_path.dentry))
+		err = PTR_ERR(h_path.dentry);
+	else {
+		if (d_is_reg(h_path.dentry)) {
+			h_path.mnt = h_ppath->mnt;
+			err = do_unlink_wh(d_inode(h_ppath->dentry), &h_path);
+		}
+		dput(h_path.dentry);
+	}
 
 	return err;
 }
@@ -761,4 +812,244 @@ struct dentry *au_wh_create(struct dentry *dentry, aufs_bindex_t bindex,
 	}
 
 	return wh_dentry;
+}
+
+/* ---------------------------------------------------------------------- */
+
+/* Delete all whiteouts in this directory on branch bindex. */
+static int del_wh_children(struct path *h_path, struct au_nhash *whlist,
+			   aufs_bindex_t bindex)
+{
+	int err;
+	unsigned long ul, n;
+	struct qstr wh_name;
+	char *p;
+	struct hlist_head *head;
+	struct au_vdir_wh *pos;
+	struct au_vdir_destr *str;
+
+	err = -ENOMEM;
+	p = (void *)__get_free_page(GFP_NOFS);
+	wh_name.name = p;
+	if (unlikely(!wh_name.name))
+		goto out;
+
+	err = 0;
+	memcpy(p, AUFS_WH_PFX, AUFS_WH_PFX_LEN);
+	p += AUFS_WH_PFX_LEN;
+	n = whlist->nh_num;
+	head = whlist->nh_head;
+	for (ul = 0; !err && ul < n; ul++, head++) {
+		hlist_for_each_entry(pos, head, wh_hash) {
+			if (pos->wh_bindex != bindex)
+				continue;
+
+			str = &pos->wh_str;
+			if (str->len + AUFS_WH_PFX_LEN <= PATH_MAX) {
+				memcpy(p, str->name, str->len);
+				wh_name.len = AUFS_WH_PFX_LEN + str->len;
+				err = unlink_wh_name(h_path, &wh_name);
+				if (!err)
+					continue;
+				break;
+			}
+			AuIOErr("whiteout name too long %.*s\n",
+				str->len, str->name);
+			err = -EIO;
+			break;
+		}
+	}
+	free_page((unsigned long)wh_name.name);
+
+out:
+	return err;
+}
+
+struct del_wh_children_args {
+	int *errp;
+	struct path *h_path;
+	struct au_nhash *whlist;
+	aufs_bindex_t bindex;
+};
+
+static void call_del_wh_children(void *args)
+{
+	struct del_wh_children_args *a = args;
+	*a->errp = del_wh_children(a->h_path, a->whlist, a->bindex);
+}
+
+/* ---------------------------------------------------------------------- */
+
+struct au_whtmp_rmdir *au_whtmp_rmdir_alloc(struct super_block *sb, gfp_t gfp)
+{
+	struct au_whtmp_rmdir *whtmp;
+	int err;
+	unsigned int rdhash;
+
+	SiMustAnyLock(sb);
+
+	whtmp = kzalloc(sizeof(*whtmp), gfp);
+	if (unlikely(!whtmp)) {
+		whtmp = ERR_PTR(-ENOMEM);
+		goto out;
+	}
+
+	/* no estimation for dir size */
+	rdhash = au_sbi(sb)->si_rdhash;
+	if (!rdhash)
+		rdhash = AUFS_RDHASH_DEF;
+	err = au_nhash_alloc(&whtmp->whlist, rdhash, gfp);
+	if (unlikely(err)) {
+		au_kfree_rcu(whtmp);
+		whtmp = ERR_PTR(err);
+	}
+
+out:
+	return whtmp;
+}
+
+void au_whtmp_rmdir_free(struct au_whtmp_rmdir *whtmp)
+{
+	if (whtmp->br)
+		au_lcnt_dec(&whtmp->br->br_count);
+	dput(whtmp->wh_dentry);
+	iput(whtmp->dir);
+	au_nhash_wh_free(&whtmp->whlist);
+	au_kfree_rcu(whtmp);
+}
+
+/*
+ * rmdir the whiteouted temporary named dir @h_dentry.
+ * @whlist: whiteouted children.
+ */
+int au_whtmp_rmdir(struct inode *dir, aufs_bindex_t bindex,
+		   struct dentry *wh_dentry, struct au_nhash *whlist)
+{
+	int err;
+	unsigned int h_nlink;
+	struct path wh_path;
+	struct inode *wh_inode, *h_dir;
+	struct au_branch *br;
+	struct mnt_idmap *h_idmap;
+
+	h_dir = d_inode(wh_dentry->d_parent); /* dir inode is locked */
+	IMustLock(h_dir);
+
+	br = au_sbr(dir->i_sb, bindex);
+	wh_path.dentry = wh_dentry;
+	wh_path.mnt = au_br_mnt(br);
+	h_idmap = au_br_idmap(br);
+	wh_inode = d_inode(wh_dentry);
+	inode_lock_nested(wh_inode, AuLsc_I_CHILD);
+
+	/*
+	 * someone else might change some whiteouts while we were sleeping.
+	 * it means this whlist may have an obsoleted entry.
+	 */
+	if (!au_test_h_perm_sio(h_idmap, wh_inode, MAY_EXEC | MAY_WRITE))
+		err = del_wh_children(&wh_path, whlist, bindex);
+	else {
+		int wkq_err;
+		struct del_wh_children_args args = {
+			.errp		= &err,
+			.h_path		= &wh_path,
+			.whlist		= whlist,
+			.bindex		= bindex
+		};
+
+		wkq_err = au_wkq_wait(call_del_wh_children, &args);
+		if (unlikely(wkq_err))
+			err = wkq_err;
+	}
+	inode_unlock(wh_inode);
+
+	if (!err) {
+		h_nlink = vfsub_inode_nlink(h_dir, AU_I_BRANCH);
+		err = vfsub_rmdir(h_dir, &wh_path);
+		/* some fs doesn't change the parent nlink in some cases */
+		h_nlink -= vfsub_inode_nlink(h_dir, AU_I_BRANCH);
+	}
+
+	if (!err) {
+		if (au_ibtop(dir) == bindex) {
+			/* todo: dir->i_mutex is necessary */
+			au_cpup_attr_timesizes(dir);
+			if (h_nlink)
+				vfsub_drop_nlink(dir);
+		}
+		return 0; /* success */
+	}
+
+	pr_warn("failed removing %pd(%d), ignored\n", wh_dentry, err);
+	return err;
+}
+
+static void call_rmdir_whtmp(void *args)
+{
+	int err;
+	aufs_bindex_t bindex;
+	struct au_whtmp_rmdir *a = args;
+	struct super_block *sb;
+	struct dentry *h_parent;
+	struct inode *h_dir;
+	struct au_hinode *hdir;
+
+	/* rmdir by nfsd may cause deadlock with this i_mutex */
+	/* inode_lock(a->dir); */
+	err = -EROFS;
+	sb = a->dir->i_sb;
+	si_read_lock(sb, !AuLock_FLUSH);
+	if (!au_br_writable(a->br->br_perm))
+		goto out;
+	bindex = au_br_index(sb, a->br->br_id);
+	if (unlikely(bindex < 0))
+		goto out;
+
+	err = -EIO;
+	ii_write_lock_parent(a->dir);
+	h_parent = dget_parent(a->wh_dentry);
+	h_dir = d_inode(h_parent);
+	hdir = au_hi(a->dir, bindex);
+	err = vfsub_mnt_want_write(au_br_mnt(a->br));
+	if (unlikely(err))
+		goto out_mnt;
+	au_hn_inode_lock_nested(hdir, AuLsc_I_PARENT);
+	err = au_h_verify(a->wh_dentry, au_opt_udba(sb), h_dir, h_parent,
+			  a->br);
+	if (!err)
+		err = au_whtmp_rmdir(a->dir, bindex, a->wh_dentry, &a->whlist);
+	au_hn_inode_unlock(hdir);
+	vfsub_mnt_drop_write(au_br_mnt(a->br));
+
+out_mnt:
+	dput(h_parent);
+	ii_write_unlock(a->dir);
+out:
+	/* inode_unlock(a->dir); */
+	au_whtmp_rmdir_free(a);
+	si_read_unlock(sb);
+	au_nwt_done(&au_sbi(sb)->si_nowait);
+	if (unlikely(err))
+		AuIOErr("err %d\n", err);
+}
+
+void au_whtmp_kick_rmdir(struct inode *dir, aufs_bindex_t bindex,
+			 struct dentry *wh_dentry, struct au_whtmp_rmdir *args)
+{
+	int wkq_err;
+	struct super_block *sb;
+
+	IMustLock(dir);
+
+	/* all post-process will be done in do_rmdir_whtmp(). */
+	sb = dir->i_sb;
+	args->dir = au_igrab(dir);
+	args->br = au_sbr(sb, bindex);
+	au_lcnt_inc(&args->br->br_count);
+	args->wh_dentry = dget(wh_dentry);
+	wkq_err = au_wkq_nowait(call_rmdir_whtmp, args, sb, /*flags*/0);
+	if (unlikely(wkq_err)) {
+		pr_warn("rmdir error %pd (%d), ignored\n", wh_dentry, wkq_err);
+		au_whtmp_rmdir_free(args);
+	}
 }
