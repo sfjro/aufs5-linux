@@ -429,7 +429,7 @@ static void au_do_refresh_dir(struct file *file)
 	}
 
 	p = fidir->fd_hfile;
-	if (!d_unlinked(file->f_path.dentry)) {
+	if (!au_test_mmapped(file) && !d_unlinked(file->f_path.dentry)) {
 		bbot = au_sbbot(sb);
 		for (finfo->fi_btop = 0; finfo->fi_btop <= bbot;
 		     finfo->fi_btop++, p++)
@@ -490,7 +490,8 @@ static int refresh_file(struct file *file, int (*reopen)(struct file *file))
 
 	err = 0;
 	need_reopen = 1;
-	err = au_file_refresh_by_inode(file, &need_reopen);
+	if (!au_test_mmapped(file))
+		err = au_file_refresh_by_inode(file, &need_reopen);
 	if (finfo->fi_hdir)
 		/* harmless if err */
 		au_fidir_realloc(finfo, nbr, /*may_shrink*/1);
