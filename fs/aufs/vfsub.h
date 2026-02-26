@@ -89,6 +89,12 @@ int vfsub_kern_path(const char *name, unsigned int flags, struct path *path);
 struct dentry *vfsub_lookup_one_len(const char *name, struct path *ppath,
 				    int len);
 
+static inline struct dentry *vfsub_lkup_one(const struct qstr *name,
+					    struct path *ppath)
+{
+	return vfsub_lookup_one_len(name->name, ppath, name->len);
+}
+
 /* ---------------------------------------------------------------------- */
 
 static inline int vfsub_mnt_want_write(struct vfsmount *mnt)
