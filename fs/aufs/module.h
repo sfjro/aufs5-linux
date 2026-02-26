@@ -14,6 +14,7 @@
 
 #include <linux/slab.h>
 #include "debug.h"
+#include "inode.h"
 
 void *au_krealloc(void *p, unsigned int new_sz, gfp_t gfp, int may_shrink);
 void *au_kzrealloc(void *p, unsigned int nused, unsigned int new_sz, gfp_t gfp,
@@ -74,6 +75,46 @@ static inline int au_kmidx_sub(size_t sz, size_t new_sz)
 	return -1; /* SLOB is untested */
 #endif
 }
+
+/* ---------------------------------------------------------------------- */
+
+/* kmem cache */
+enum {
+	AuCache_ICNTNR,
+	AuCache_Last
+};
+
+extern struct kmem_cache *au_cache[AuCache_Last];
+
+#define AuCacheFlags		SLAB_RECLAIM_ACCOUNT
+#define AuCache(type)		KMEM_CACHE(type, AuCacheFlags)
+#define AuCacheCtor(type, ctor)	\
+	kmem_cache_create(#type, sizeof(struct type), \
+			  __alignof__(struct type), AuCacheFlags, ctor)
+
+#define AuCacheFuncAlloc(name, index)					\
+	static inline struct au_##name *au_cache_alloc_##name(void)	\
+	{ return kmem_cache_alloc(au_cache[AuCache_##index], GFP_NOFS); }
+
+#define AuCacheFuncs(name, index)					\
+	static inline void au_cache_free_##name##_norcu(struct au_##name *p) \
+	{ kmem_cache_free(au_cache[AuCache_##index], p); }		\
+									\
+	static inline void au_cache_free_##name##_rcu_cb(struct rcu_head *rcu) \
+	{ void *p = rcu;						\
+		p -= offsetof(struct au_##name, rcu);			\
+		kmem_cache_free(au_cache[AuCache_##index], p); }	\
+	static inline void au_cache_free_##name##_rcu(struct au_##name *p) \
+	{ BUILD_BUG_ON(sizeof(struct au_##name) < sizeof(struct rcu_head)); \
+		call_rcu(&p->rcu, au_cache_free_##name##_rcu_cb); }	\
+									\
+	static inline void au_cache_free_##name(struct au_##name *p)	\
+	{ /* au_cache_free_##name##_norcu(p); */			\
+		au_cache_free_##name##_rcu(p); }
+
+AuCacheFuncs(icntnr, ICNTNR);
+static inline struct au_icntnr *au_cache_alloc_icntnr(struct super_block *sb)
+{ return alloc_inode_sb(sb, au_cache[AuCache_ICNTNR], GFP_NOFS); }
 
 #endif /* __KERNEL__ */
 #endif /* __AUFS_MODULE_H__ */
