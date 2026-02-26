@@ -88,6 +88,17 @@ int vfsub_kern_path(const char *name, unsigned int flags, struct path *path)
 	return err;
 }
 
+struct dentry *vfsub_lookup_one_len_unlocked(const char *name,
+					     struct path *ppath, int len)
+{
+	struct path path;
+
+	path.dentry = lookup_noperm_unlocked(&QSTR_LEN(name, len),
+					     ppath->dentry);
+	AuTraceErrPtr(path.dentry);
+	return path.dentry;
+}
+
 struct dentry *vfsub_lookup_one_len(const char *name, struct path *ppath,
 				    int len)
 {
@@ -438,6 +449,19 @@ ssize_t vfsub_write_k(struct file *file, void *kbuf, size_t count, loff_t *ppos)
 	err = kernel_write(file, kbuf, count, ppos);
 	lockdep_on();
 	/* re-commit later */
+	return err;
+}
+
+int vfsub_iterate_dir(struct file *file, struct dir_context *ctx)
+{
+	int err;
+
+	AuDbg("%pD, ctx{%ps, %llu}\n", file, ctx->actor, ctx->pos);
+
+	lockdep_off();
+	err = iterate_dir(file, ctx);
+	lockdep_on();
+
 	return err;
 }
 

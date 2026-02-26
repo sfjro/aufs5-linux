@@ -25,6 +25,8 @@ extern int sysaufs_brs;
 
 /* ---------------------------------------------------------------------- */
 
+extern int au_dir_roflags;
+
 void *au_krealloc(void *p, unsigned int new_sz, gfp_t gfp, int may_shrink);
 void *au_kzrealloc(void *p, unsigned int nused, unsigned int new_sz, gfp_t gfp,
 		   int may_shrink);

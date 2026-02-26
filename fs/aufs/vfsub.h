@@ -86,6 +86,9 @@ static inline void vfsub_inode_nlink_init(struct inode *inode,
 struct file *vfsub_dentry_open(struct path *path, int flags);
 struct file *vfsub_filp_open(const char *path, int oflags, int mode);
 int vfsub_kern_path(const char *name, unsigned int flags, struct path *path);
+
+struct dentry *vfsub_lookup_one_len_unlocked(const char *name,
+					     struct path *ppath, int len);
 struct dentry *vfsub_lookup_one_len(const char *name, struct path *ppath,
 				    int len);
 
@@ -145,6 +148,7 @@ ssize_t vfsub_write_u(struct file *file, const char __user *ubuf, size_t count,
 		      loff_t *ppos);
 ssize_t vfsub_write_k(struct file *file, void *kbuf, size_t count,
 		      loff_t *ppos);
+int vfsub_iterate_dir(struct file *file, struct dir_context *ctx);
 
 static inline loff_t vfsub_f_size_read(struct file *file)
 {
