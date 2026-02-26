@@ -96,7 +96,8 @@ static int aufs_permission(struct mnt_idmap *idmap, struct inode *inode,
 #endif
 
 	if (!isdir
-	    || write_mask) {
+	    || write_mask
+	    || au_opt_test(au_mntflags(sb), DIRPERM1)) {
 		err = au_busy_or_stale();
 		h_inode = au_h_iptr(inode, au_ibtop(inode));
 		if (unlikely(!h_inode
