@@ -436,6 +436,15 @@ const struct fs_parameter_spec aufs_fsctx_paramspec[] = {
 	/* internal use for the scripts */
 	fsparam_string("si", Opt_ignore_silent),
 
+	/* obsoleted, keep them temporary */
+	fsparam_flag("nodlgt", Opt_ignore_silent),
+	fsparam_flag("clean_plink", Opt_ignore),
+	fsparam_string("dirs", Opt_br),
+	fsparam_u32("debug", Opt_ignore),
+	/* "whiteout" or "all" */
+	fsparam_string("delete", Opt_ignore),
+	fsparam_string("imap", Opt_ignore),
+
 	/* temporary workaround, due to old mount(8)? */
 	fsparam_flag("relatime", Opt_ignore_silent),
 
