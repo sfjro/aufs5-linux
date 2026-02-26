@@ -41,11 +41,17 @@ struct au_cp_generic {
 #define AuCpup_KEEPLINO		BIT(1)		/* do not clear the lower xino,
 						   for link(2) */
 #define AuCpup_RENAME		BIT(2)		/* rename after cpup */
-
+#define AuCpup_HOPEN		BIT(3)		/* call h_open_pre/post() in
+						   cpup */
 #define AuCpup_OVERWRITE	BIT(4)		/* allow overwriting the
 						   existing entry */
 #define AuCpup_RWDST		BIT(5)		/* force write target even if
 						   the branch is marked as RO */
+
+#ifndef CONFIG_AUFS_BR_HFSPLUS
+#undef AuCpup_HOPEN
+#define AuCpup_HOPEN		0
+#endif
 
 #define au_ftest_cpup(flags, name)	((flags) & AuCpup_##name)
 #define au_fset_cpup(flags, name) \

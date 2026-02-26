@@ -1089,7 +1089,7 @@ int aufs_rename(struct mnt_idmap *idmap,
 				.bsrc	= a->src_btop,
 				.len	= -1,
 				.pin	= &pin,
-				.flags	= AuCpup_DTIME
+				.flags	= AuCpup_DTIME | AuCpup_HOPEN
 			};
 			AuDebugOn(au_dbtop(a->src_dentry) != a->src_btop);
 			err = au_sio_cpup_simple(&cpg);
@@ -1116,7 +1116,7 @@ int aufs_rename(struct mnt_idmap *idmap,
 				.bsrc	= a->dst_btop,
 				.len	= -1,
 				.pin	= &pin,
-				.flags	= AuCpup_DTIME
+				.flags	= AuCpup_DTIME | AuCpup_HOPEN
 			};
 			err = au_sio_cpup_simple(&cpg);
 			au_unpin(&pin);

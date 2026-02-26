@@ -894,7 +894,7 @@ int au_pin_and_icpup(struct dentry *dentry, struct iattr *ia,
 			.bsrc	= btop,
 			.len	= sz,
 			.pin	= &a->pin,
-			.flags	= AuCpup_DTIME
+			.flags	= AuCpup_DTIME | AuCpup_HOPEN
 		};
 		err = au_sio_cpup_simple(&cpg);
 		if (!err)
