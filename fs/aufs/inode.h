@@ -208,7 +208,8 @@ struct au_icpup_args {
 int au_pin_and_icpup(struct dentry *dentry, struct iattr *ia,
 		     struct au_icpup_args *a);
 
-int au_h_path_getattr(struct dentry *dentry, int force, struct path *h_path);
+int au_h_path_getattr(struct dentry *dentry, struct inode *inode, int force,
+		      struct path *h_path, int locked);
 
 /* i_op_add.c */
 int au_may_add(struct dentry *dentry, aufs_bindex_t bindex,
@@ -303,6 +304,51 @@ AuStubVoid(au_plink_append, struct inode *inode, aufs_bindex_t bindex,
 AuStubVoid(au_plink_put, struct super_block *sb, int verbose);
 AuStubVoid(au_plink_clean, struct super_block *sb, int verbose);
 #endif /* CONFIG_PROC_FS */
+
+#ifdef CONFIG_AUFS_XATTR
+/* xattr.c */
+int au_cpup_xattr(struct path *h_dst, struct path *h_src, int ignore_flags,
+		  unsigned int verbose);
+ssize_t aufs_listxattr(struct dentry *dentry, char *list, size_t size);
+void au_xattr_init(struct super_block *sb);
+#else
+AuStubInt0(au_cpup_xattr, struct path *h_dst, struct path *h_src,
+	   int ignore_flags, unsigned int verbose);
+AuStubVoid(au_xattr_init, struct super_block *sb);
+#endif
+
+#ifdef CONFIG_FS_POSIX_ACL
+struct posix_acl *aufs_get_inode_acl(struct inode *inode, int type, bool rcu);
+struct posix_acl *aufs_get_acl(struct mnt_idmap *idmap, struct dentry *dentry,
+			       int type);
+int aufs_set_acl(struct mnt_idmap *idmap, struct dentry *dentry,
+		 struct posix_acl *acl, int type);
+#endif
+
+#if IS_ENABLED(CONFIG_AUFS_XATTR) || IS_ENABLED(CONFIG_FS_POSIX_ACL)
+enum {
+	AU_XATTR_SET,
+	AU_ACL_SET
+};
+
+struct au_sxattr {
+	int type;
+	union {
+		struct {
+			const char	*name;
+			const void	*value;
+			size_t		size;
+			int		flags;
+		} set;
+		struct {
+			struct posix_acl *acl;
+			int		type;
+		} acl_set;
+	} u;
+};
+ssize_t au_sxattr(struct dentry *dentry, struct inode *inode,
+		  struct au_sxattr *arg);
+#endif
 
 /* ---------------------------------------------------------------------- */
 

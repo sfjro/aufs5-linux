@@ -113,6 +113,7 @@ static int au_fsctx_fill_super(struct super_block *sb, struct fs_context *fc)
 	sb->s_maxbytes = 0;
 	sb->s_stack_depth = 1;
 	au_export_init(sb);
+	au_xattr_init(sb);
 
 	err = au_alloc_root(sb);
 	if (unlikely(err)) {
@@ -217,6 +218,7 @@ static void au_fsctx_dump(struct au_opts *opts)
 		au_fsctx_TF(trunc_xib);
 		au_fsctx_TF(plink);
 		au_fsctx_TF(dio);
+		au_fsctx_TF(acl);
 #undef au_fsctx_TF
 
 		case Opt_trunc_xino_path:
@@ -325,6 +327,13 @@ const struct fs_parameter_spec aufs_fsctx_paramspec[] = {
 	fsparam_string("cpup", Opt_wbr_copyup),
 	fsparam_string("copyup", Opt_wbr_copyup),
 	fsparam_string("copyup_policy", Opt_wbr_copyup),
+
+	/* generic VFS flag */
+#ifdef CONFIG_FS_POSIX_ACL
+	fsparam_flag_no("acl", Opt_acl),
+#else
+	au_ignore_flag("acl", Opt_ignore),
+#endif
 
 	/* internal use for the scripts */
 	fsparam_string("si", Opt_ignore_silent),
@@ -672,6 +681,7 @@ static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *para
 	au_fsctx_TF(trunc_xib);
 	au_fsctx_TF(plink);
 	au_fsctx_TF(dio);
+	au_fsctx_TF(acl);
 #undef au_fsctx_TF
 
 	case Opt_noxino:

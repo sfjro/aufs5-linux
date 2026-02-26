@@ -103,6 +103,12 @@ typedef int16_t aufs_bindex_t;
 #define AUFS_BRPERM_RW		"rw"
 #define AUFS_BRPERM_RO		"ro"
 #define AUFS_BRPERM_RR		"rr"
+#define AUFS_BRATTR_ICEX	"icex"
+#define AUFS_BRATTR_ICEX_SEC	"icexsec"
+#define AUFS_BRATTR_ICEX_SYS	"icexsys"
+#define AUFS_BRATTR_ICEX_TR	"icextr"
+#define AUFS_BRATTR_ICEX_USR	"icexusr"
+#define AUFS_BRATTR_ICEX_OTH	"icexoth"
 #define AUFS_BRRATTR_WH		"wh"
 #define AUFS_BRWATTR_NLWH	"nolwh"
 
@@ -111,14 +117,49 @@ typedef int16_t aufs_bindex_t;
 #define AuBrPerm_RR		(1 << 2)	/* natively readonly */
 #define AuBrPerm_Mask		(AuBrPerm_RW | AuBrPerm_RO | AuBrPerm_RR)
 
-#define AuBrRAttr_WH		(1 << 7)	/* whiteout-able */
+/* ignore error in copying XATTR */
+#define AuBrAttr_ICEX_SEC	(1 << 7)
+#define AuBrAttr_ICEX_SYS	(1 << 8)
+#define AuBrAttr_ICEX_TR	(1 << 9)
+#define AuBrAttr_ICEX_USR	(1 << 10)
+#define AuBrAttr_ICEX_OTH	(1 << 11)
+#define AuBrAttr_ICEX		(AuBrAttr_ICEX_SEC	\
+				 | AuBrAttr_ICEX_SYS	\
+				 | AuBrAttr_ICEX_TR	\
+				 | AuBrAttr_ICEX_USR	\
+				 | AuBrAttr_ICEX_OTH)
+
+#define AuBrRAttr_WH		(1 << 12)	/* whiteout-able */
 #define AuBrRAttr_Mask		AuBrRAttr_WH
 
-#define AuBrWAttr_NoLinkWH	(1 << 8)	/* un-hardlinkable whiteouts */
+#define AuBrWAttr_NoLinkWH	(1 << 13)	/* un-hardlinkable whiteouts */
 #define AuBrWAttr_Mask		AuBrWAttr_NoLinkWH
 
+/* #warning test userspace */
+#ifdef __KERNEL__
+#ifndef CONFIG_AUFS_XATTR
+#undef	AuBrAttr_ICEX
+#define AuBrAttr_ICEX		0
+#undef	AuBrAttr_ICEX_SEC
+#define AuBrAttr_ICEX_SEC	0
+#undef	AuBrAttr_ICEX_SYS
+#define AuBrAttr_ICEX_SYS	0
+#undef	AuBrAttr_ICEX_TR
+#define AuBrAttr_ICEX_TR	0
+#undef	AuBrAttr_ICEX_USR
+#define AuBrAttr_ICEX_USR	0
+#undef	AuBrAttr_ICEX_OTH
+#define AuBrAttr_ICEX_OTH	0
+#endif
+#endif
+
 /* the longest combination */
-#define AuBrPermStrSz	sizeof(AUFS_BRPERM_RO		\
+/* AUFS_BRATTR_ICEX and AUFS_BRATTR_ICEX_TR don't affect here */
+#define AuBrPermStrSz	sizeof(AUFS_BRPERM_RW			\
+			       "+" AUFS_BRATTR_ICEX_SEC		\
+			       "+" AUFS_BRATTR_ICEX_SYS		\
+			       "+" AUFS_BRATTR_ICEX_USR		\
+			       "+" AUFS_BRATTR_ICEX_OTH		\
 			       "+" AUFS_BRWATTR_NLWH)
 
 typedef struct {
