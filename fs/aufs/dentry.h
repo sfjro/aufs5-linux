@@ -13,6 +13,7 @@
 #ifdef __KERNEL__
 
 #include <linux/dcache.h>
+#include "dirren.h"
 #include "rwsem.h"
 
 struct au_hdentry {
@@ -36,17 +37,24 @@ struct au_dinfo {
 /* flags for au_lkup_dentry() */
 #define AuLkup_ALLOW_NEG	BIT(0)
 #define AuLkup_IGNORE_PERM	BIT(1)
+#define AuLkup_DIRREN		BIT(2)
 #define au_ftest_lkup(flags, name)	((flags) & AuLkup_##name)
 #define au_fset_lkup(flags, name) \
 	do { (flags) |= AuLkup_##name; } while (0)
 #define au_fclr_lkup(flags, name) \
 	do { (flags) &= ~AuLkup_##name; } while (0)
 
+#ifndef CONFIG_AUFS_DIRREN
+#undef AuLkup_DIRREN
+#define AuLkup_DIRREN 0
+#endif
+
 struct au_do_lookup_args {
 	unsigned int		flags;
 	mode_t			type;
 	struct qstr		whname;
 	const struct qstr	*name;
+	struct au_dr_lookup	dirren;
 };
 
 /* ---------------------------------------------------------------------- */

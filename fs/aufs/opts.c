@@ -479,6 +479,13 @@ static int au_opt_simple(struct super_block *sb, struct au_opt *opt,
 			pr_warn_once("ignored nodio\n");
 		break;
 
+	case Opt_warn_perm:
+		if (opt->tf)
+			au_opt_set(sbinfo->si_mntflags, WARN_PERM);
+		else
+			au_opt_clr(sbinfo->si_mntflags, WARN_PERM);
+		break;
+
 	case Opt_verbose:
 		if (opt->tf)
 			au_opt_set(sbinfo->si_mntflags, VERBOSE);
@@ -522,6 +529,13 @@ static int au_opt_simple(struct super_block *sb, struct au_opt *opt,
 		sbinfo->si_rdhash = opt->rdhash;
 		break;
 
+	case Opt_shwh:
+		if (opt->tf)
+			au_opt_set(sbinfo->si_mntflags, SHWH);
+		else
+			au_opt_clr(sbinfo->si_mntflags, SHWH);
+		break;
+
 	case Opt_dirperm1:
 		if (opt->tf)
 			au_opt_set(sbinfo->si_mntflags, DIRPERM1);
@@ -549,6 +563,28 @@ static int au_opt_simple(struct super_block *sb, struct au_opt *opt,
 			au_fset_opts(opts->flags, TRUNC_XIB);
 		else
 			au_fclr_opts(opts->flags, TRUNC_XIB);
+		break;
+
+	case Opt_dirren:
+		err = 1;
+		if (opt->tf) {
+			if (!au_opt_test(sbinfo->si_mntflags, DIRREN)) {
+				err = au_dr_opt_set(sb);
+				if (!err)
+					err = 1;
+			}
+			if (err == 1)
+				au_opt_set(sbinfo->si_mntflags, DIRREN);
+		} else {
+			if (au_opt_test(sbinfo->si_mntflags, DIRREN)) {
+				err = au_dr_opt_clr(sb, au_ftest_opts(opts->flags,
+								      DR_FLUSHED));
+				if (!err)
+					err = 1;
+			}
+			if (err == 1)
+				au_opt_clr(sbinfo->si_mntflags, DIRREN);
+		}
 		break;
 
 	case Opt_acl:
@@ -668,6 +704,8 @@ int au_opts_verify(struct super_block *sb, unsigned long sb_flags,
 	if (!(sb_flags & SB_RDONLY)) {
 		if (unlikely(!au_br_writable(au_sbr_perm(sb, 0))))
 			pr_warn("first branch should be rw\n");
+		if (unlikely(au_opt_test(sbinfo->si_mntflags, SHWH)))
+			pr_warn_once("shwh should be used with ro\n");
 	}
 
 	if (au_opt_test((sbinfo->si_mntflags | pending), UDBA_HNOTIFY)
@@ -869,7 +907,11 @@ int au_opts_remount(struct super_block *sb, struct au_opts *opts)
 
 	SiMustWriteLock(sb);
 
-	err = 0;
+	err = au_dr_opt_flush(sb);
+	if (unlikely(err))
+		goto out;
+	au_fset_opts(opts->flags, DR_FLUSHED);
+
 	dir = d_inode(sb->s_root);
 	sbinfo = au_sbi(sb);
 	opt_xino = NULL;
@@ -911,6 +953,7 @@ int au_opts_remount(struct super_block *sb, struct au_opts *opts)
 
 	AuDbg("status 0x%x\n", opts->flags);
 
+out:
 	return err;
 }
 
