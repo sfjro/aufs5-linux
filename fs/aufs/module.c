@@ -242,4 +242,20 @@ out:
 	return err;
 }
 
+static void __exit aufs_exit(void)
+{
+	unregister_filesystem(&aufs_fs_type);
+	au_cache_fin();
+	au_sysrq_fin();
+	au_hnotify_fin();
+	au_loopback_fin();
+	au_wkq_fin();
+	au_procfs_fin();
+	dbgaufs_fin();
+	sysaufs_fin();
+	au_dy_fin();
+	au_sbilist_fin();
+}
+
 module_init(aufs_init);
+module_exit(aufs_exit);
