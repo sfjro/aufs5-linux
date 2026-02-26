@@ -83,6 +83,8 @@ static struct au_branch *au_br_alloc(struct super_block *sb, int new_nbranch,
 				     int perm)
 {
 	struct au_branch *add_branch;
+	struct dentry *root;
+	struct inode *inode;
 	int err;
 
 	err = -ENOMEM;
@@ -90,9 +92,6 @@ static struct au_branch *au_br_alloc(struct super_block *sb, int new_nbranch,
 	if (unlikely(!add_branch))
 		goto out;
 
-#if 0 /* re-commit later */
-	struct dentry *root;
-	struct inode *inode;
 	root = sb->s_root;
 	err = au_sbr_realloc(au_sbi(sb), new_nbranch, /*may_shrink*/0);
 	if (!err)
@@ -102,7 +101,6 @@ static struct au_branch *au_br_alloc(struct super_block *sb, int new_nbranch,
 		err = au_hinode_realloc(au_ii(inode), new_nbranch,
 					/*may_shrink*/0);
 	}
-#endif
 	if (!err)
 		return add_branch; /* success */
 
@@ -128,8 +126,7 @@ static int test_add(struct super_block *sb, struct au_opt_add *add)
 	root = sb->s_root;
 	bbot = au_sbbot(sb);
 	if (unlikely(bbot >= 0
-		     /* re-commit later */
-		     /* && au_find_dbindex(root, add->path.dentry) >= 0 */)) {
+		     && au_find_dbindex(root, add->path.dentry) >= 0)) {
 		err = -EINVAL;
 		pr_err("%s duplicated\n", add->pathname);
 		goto out;
@@ -274,8 +271,7 @@ static void au_br_do_add(struct super_block *sb, struct au_branch *br,
 	au_br_do_add_hip(au_ii(root_inode), bindex, bbot, amount);
 	au_set_h_dptr(root, bindex, dget(h_dentry));
 	h_inode = d_inode(h_dentry);
-	/* re-commit later */
-	/* au_set_h_iptr(root_inode, bindex, au_igrab(h_inode), /\*flags*\/0); */
+	au_set_h_iptr(root_inode, bindex, au_igrab(h_inode), /*flags*/0);
 }
 
 int au_br_add(struct super_block *sb, struct au_opt_add *add)

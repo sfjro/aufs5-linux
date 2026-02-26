@@ -7,6 +7,7 @@
  * sub-routines for VFS
  */
 
+#include <linux/namei.h>
 #include "aufs.h"
 
 unsigned int vfsub_inode_nlink_aufs(struct inode *inode)
@@ -54,4 +55,15 @@ void vfsub_set_nlink(struct inode *inode, unsigned int nlink)
 	if (nlink != inode->i_nlink)
 		set_nlink(inode, nlink);
 	au_nlink_unlock(inode);
+}
+
+/* ---------------------------------------------------------------------- */
+
+int vfsub_kern_path(const char *name, unsigned int flags, struct path *path)
+{
+	int err;
+
+	err = kern_path(name, flags, path);
+	/* add more later */
+	return err;
 }

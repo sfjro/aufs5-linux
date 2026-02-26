@@ -45,11 +45,16 @@ void au_set_h_iptr(struct inode *inode, aufs_bindex_t bindex,
 		au_hiput(hinode);
 	hinode->hi_inode = h_inode;
 	if (h_inode) {
+		struct super_block *sb = inode->i_sb;
+		struct au_branch *br;
+
 		AuDebugOn(inode->i_mode
 			  && (h_inode->i_mode & S_IFMT)
 			  != (inode->i_mode & S_IFMT));
 		if (bindex == iinfo->ii_btop)
 			au_cpup_igen(inode, h_inode);
+		br = au_sbr(sb, bindex);
+		hinode->hi_id = br->br_id;
 	}
 }
 
@@ -83,6 +88,7 @@ void au_icntnr_init_once(void *_c)
 void au_hinode_init(struct au_hinode *hinode)
 {
 	hinode->hi_inode = NULL;
+	hinode->hi_id = -1;
 }
 
 int au_iinfo_init(struct inode *inode)
@@ -94,7 +100,9 @@ int au_iinfo_init(struct inode *inode)
 
 	sb = inode->i_sb;
 	iinfo = &(container_of(inode, struct au_icntnr, vfs_inode)->iinfo);
-	nbr = 1; /* re-commit later */
+	nbr = au_sbbot(sb) + 1;
+	if (unlikely(nbr <= 0))
+		nbr = 1;
 	hi = kmalloc_array(nbr, sizeof(*iinfo->ii_hinode), GFP_NOFS);
 	if (hi) {
 		iinfo->ii_hinode = hi;
@@ -107,6 +115,28 @@ int au_iinfo_init(struct inode *inode)
 		return 0;
 	}
 	return -ENOMEM;
+}
+
+int au_hinode_realloc(struct au_iinfo *iinfo, int nbr, int may_shrink)
+{
+	int err, i;
+	struct au_hinode *hip;
+
+	AuRwMustWriteLock(&iinfo->ii_rwsem);
+
+	err = -ENOMEM;
+	hip = au_krealloc(iinfo->ii_hinode, sizeof(*hip) * nbr, GFP_NOFS,
+			  may_shrink);
+	if (hip) {
+		iinfo->ii_hinode = hip;
+		i = iinfo->ii_bbot + 1;
+		hip += i;
+		for (; i < nbr; i++, hip++)
+			au_hinode_init(hip);
+		err = 0;
+	}
+
+	return err;
 }
 
 void au_iinfo_fin(struct inode *inode)
@@ -128,6 +158,6 @@ void au_iinfo_fin(struct inode *inode)
 			hi++;
 		}
 	}
-	au_kfree_small(iinfo->ii_hinode);
+	au_kfree_rcu(iinfo->ii_hinode);
 	AuRwDestroy(&iinfo->ii_rwsem);
 }
