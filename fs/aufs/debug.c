@@ -206,8 +206,8 @@ void au_dpri_sb(struct super_block *sb)
 	sbinfo = au_sbi(sb);
 	if (!sbinfo)
 		return;
-	dpri("gen %u, kobj %d\n",
-	     sbinfo->si_generation,
+	dpri("nw %d, gen %u, kobj %d\n",
+	     atomic_read(&sbinfo->si_nowait.nw_len), sbinfo->si_generation,
 	     kref_read(&sbinfo->si_kobj.kref));
 	for (bindex = 0; bindex <= sbinfo->si_bbot; bindex++)
 		do_pri_br(bindex, sbinfo->si_branch[0 + bindex]);
@@ -267,4 +267,16 @@ void au_dbg_verify_gen(struct dentry *parent, unsigned int sigen)
 			AuDebugOn(au_digen_test(dentries[j], sigen));
 	}
 	au_dpages_free(&dpages);
+}
+
+void au_dbg_verify_kthread(void)
+{
+	if (au_wkq_test()) {
+		/* au_dbg_blocked(); re-commit later */
+		/*
+		 * It may be recursive, but udba=notify between two aufs mounts,
+		 * where a single ro branch is shared, is not a problem.
+		 */
+		/* WARN_ON(1); */
+	}
 }

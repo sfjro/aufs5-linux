@@ -120,13 +120,19 @@ static int __init aufs_init(void)
 
 	memset(au_cache, 0, sizeof(au_cache));
 
-	err = au_cache_init();
+	err = au_wkq_init();
 	if (unlikely(err))
 		goto out;
+	err = au_cache_init();
+	if (unlikely(err))
+		goto out_wkq;
 
 	/* since we define pr_fmt, call printk directly */
 	printk(KERN_INFO AUFS_NAME " " AUFS_VERSION "\n");
+	goto out; /* success */
 
+out_wkq:
+	au_wkq_fin();
 out:
 	return err;
 }
