@@ -31,7 +31,7 @@ int au_do_open_nondir(struct file *file, int flags, struct file *h_file)
 	atomic_set(&finfo->fi_mmapped, 0);
 	bindex = au_dbtop(dentry);
 	if (!h_file)
-		h_file = au_h_open(dentry, bindex, flags, file);
+		h_file = au_h_open(dentry, bindex, flags, file, /*force_wr*/0);
 	else
 		get_file(h_file);
 	if (IS_ERR(h_file))
@@ -218,7 +218,7 @@ out:
 }
 
 static void au_write_post(struct inode *inode, struct file *h_file,
-			  struct au_write_pre *wpre)
+			  struct au_write_pre *wpre, ssize_t written)
 {
 	struct inode *h_inode;
 
@@ -228,6 +228,10 @@ static void au_write_post(struct inode *inode, struct file *h_file,
 	h_inode = file_inode(h_file);
 	inode->i_mode = h_inode->i_mode;
 	ii_write_unlock(inode);
+	/* AuDbg("blks %llu, %llu\n", (u64)blks, (u64)h_inode->i_blocks); */
+	if (written > 0)
+		au_fhsm_wrote(inode->i_sb, wpre->btop,
+			      /*force*/h_inode->i_blocks > wpre->blks);
 	fput(h_file);
 }
 
@@ -343,7 +347,7 @@ static ssize_t aufs_write_iter(struct kiocb *kio, struct iov_iter *iov_iter)
 		file_end_write(file);
 	}
 	err = au_do_iter(h_file, MAY_WRITE, kio, iov_iter);
-	au_write_post(inode, h_file, &wpre);
+	au_write_post(inode, h_file, &wpre, err);
 
 out:
 	si_read_unlock(inode->i_sb);
@@ -407,7 +411,7 @@ aufs_splice_write(struct pipe_inode_info *pipe, struct file *file, loff_t *ppos,
 		goto out;
 
 	err = vfsub_splice_from(pipe, h_file, ppos, len, flags);
-	au_write_post(inode, h_file, &wpre);
+	au_write_post(inode, h_file, &wpre, err);
 
 out:
 	si_read_unlock(inode->i_sb);
@@ -439,7 +443,7 @@ static long aufs_fallocate(struct file *file, int mode, loff_t offset,
 	 * we don't need to call file_modifed() here since au_write_post()
 	 * is equivalent and copies-up all timestamps and permission bits.
 	 */
-	au_write_post(inode, h_file, &wpre);
+	au_write_post(inode, h_file, &wpre, /*written*/1);
 
 out:
 	si_read_unlock(inode->i_sb);
@@ -498,7 +502,8 @@ static ssize_t aufs_copy_file_range(struct file *src, loff_t src_pos,
 		a_src.h_file = au_read_pre(src, /*keep_fi*/1, AuLsc_FI_2);
 		err = PTR_ERR(a_src.h_file);
 		if (IS_ERR(a_src.h_file)) {
-			au_write_post(a_dst.inode, a_dst.h_file, &wpre);
+			au_write_post(a_dst.inode, a_dst.h_file, &wpre,
+				      /*written*/0);
 			goto out_si;
 		}
 	}
@@ -516,7 +521,7 @@ static ssize_t aufs_copy_file_range(struct file *src, loff_t src_pos,
 				    dst_pos, len, flags);
 
 out_file:
-	au_write_post(a_dst.inode, a_dst.h_file, &wpre);
+	au_write_post(a_dst.inode, a_dst.h_file, &wpre, err);
 	fi_read_unlock(src);
 	au_read_post(a_src.inode, a_src.h_file);
 out_si:
@@ -664,7 +669,7 @@ static int aufs_fsync_nondir(struct file *file, loff_t start, loff_t end,
 		goto out_unlock;
 
 	err = vfsub_fsync(h_file, &h_file->f_path, datasync);
-	au_write_post(inode, h_file, &wpre);
+	au_write_post(inode, h_file, &wpre, /*written*/0);
 
 out_unlock:
 	si_read_unlock(inode->i_sb);

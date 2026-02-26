@@ -32,6 +32,7 @@ enum {
 	Opt_diropq, Opt_diropq_a, Opt_diropq_w,
 	Opt_warn_perm,
 	Opt_wbr_copyup, Opt_wbr_create,
+	Opt_fhsm_sec,
 	Opt_verbose, Opt_noverbose,
 	Opt_sum, Opt_wsum,
 	Opt_dirperm1,
@@ -188,8 +189,8 @@ struct au_opt {
 		int			udba;
 		struct au_opt_wbr_create wbr_create;
 		int			wbr_copyup;
+		unsigned int		fhsm_second;
 		bool			tf; /* generic flag, true or false */
-		/* add more later */
 	};
 };
 

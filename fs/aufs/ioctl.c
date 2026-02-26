@@ -84,7 +84,8 @@ static int au_wbr_fd(const struct path *path, struct aufs_wbr_fd __user *arg)
 	}
 	AuDbg("wbi %d\n", wbi);
 	if (wbi >= 0)
-		h_file = au_h_open(root, wbi, wbrfd.oflags, NULL);
+		h_file = au_h_open(root, wbi, wbrfd.oflags, NULL,
+				   /*force_wr*/0);
 
 out_unlock:
 	aufs_read_unlock(root, AuLock_IR);
@@ -109,6 +110,7 @@ out:
 long aufs_ioctl_dir(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	long err;
+	struct dentry *dentry;
 
 	switch (cmd) {
 	case AUFS_CTL_RDU:
@@ -120,8 +122,20 @@ long aufs_ioctl_dir(struct file *file, unsigned int cmd, unsigned long arg)
 		err = au_wbr_fd(&file->f_path, (void __user *)arg);
 		break;
 
+	case AUFS_CTL_IBUSY:
+		err = au_ibusy_ioctl(file, arg);
+		break;
+
 	case AUFS_CTL_BRINFO:
 		err = au_brinfo_ioctl(file, arg);
+		break;
+
+	case AUFS_CTL_FHSM_FD:
+		dentry = file->f_path.dentry;
+		if (IS_ROOT(dentry))
+			err = au_fhsm_fd(dentry->d_sb, arg);
+		else
+			err = -ENOTTY;
 		break;
 
 	default:
@@ -139,6 +153,10 @@ long aufs_ioctl_nondir(struct file *file, unsigned int cmd, unsigned long arg)
 	long err;
 
 	switch (cmd) {
+	case AUFS_CTL_MVDOWN:
+		err = au_mvdown(file->f_path.dentry, (void __user *)arg);
+		break;
+
 	case AUFS_CTL_WBR_FD:
 		err = au_wbr_fd(&file->f_path, (void __user *)arg);
 		break;
@@ -163,6 +181,10 @@ long aufs_compat_ioctl_dir(struct file *file, unsigned int cmd,
 	case AUFS_CTL_RDU:
 	case AUFS_CTL_RDU_INO:
 		err = au_rdu_compat_ioctl(file, cmd, arg);
+		break;
+
+	case AUFS_CTL_IBUSY:
+		err = au_ibusy_compat_ioctl(file, arg);
 		break;
 
 	case AUFS_CTL_BRINFO:
