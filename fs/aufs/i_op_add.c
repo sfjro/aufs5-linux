@@ -876,7 +876,8 @@ struct dentry *aufs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	/* make the dir opaque */
 	diropq = 0;
 	h_inode = d_inode(h_path.dentry);
-	if (wh_dentry) {
+	if (wh_dentry
+	    || au_opt_test(au_mntflags(sb), ALWAYS_DIROPQ)) {
 		inode_lock_nested(h_inode, AuLsc_I_CHILD);
 		opq_dentry = au_diropq_create(dentry, bindex);
 		inode_unlock(h_inode);

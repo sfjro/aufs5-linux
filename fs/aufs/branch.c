@@ -467,12 +467,14 @@ static void au_br_do_add(struct super_block *sb, struct au_branch *br,
 	bbot = au_sbbot(sb);
 	amount = bbot + 1 - bindex;
 	h_dentry = au_br_dentry(br);
+	au_sbilist_write_lock();
 	au_br_do_add_brp(au_sbi(sb), bindex, br, bbot, amount);
 	au_br_do_add_hdp(au_di(root), bindex, bbot, amount);
 	au_br_do_add_hip(au_ii(root_inode), bindex, bbot, amount);
 	au_set_h_dptr(root, bindex, dget(h_dentry));
 	h_inode = d_inode(h_dentry);
 	au_set_h_iptr(root_inode, bindex, au_igrab(h_inode), /*flags*/0);
+	au_sbilist_write_unlock();
 }
 
 int au_br_add(struct super_block *sb, struct au_opt_add *add, int remount)
@@ -511,6 +513,7 @@ int au_br_add(struct super_block *sb, struct au_opt_add *add, int remount)
 	sysaufs_brs_del(sb, add_bindex);	/* remove successors */
 	au_br_do_add(sb, add_branch, add_bindex);
 	sysaufs_brs_add(sb, add_bindex);	/* append successors */
+	dbgaufs_brs_add(sb, add_bindex, /*topdown*/0);	/* rename successors */
 
 	h_dentry = add->path.dentry;
 	if (!add_bindex) {
@@ -949,9 +952,11 @@ static void au_br_do_del(struct super_block *sb, aufs_bindex_t bindex,
 	h_inode = au_igrab(hinode->hi_inode);
 	au_hiput(hinode);
 
+	au_sbilist_write_lock();
 	au_br_do_del_brp(sbinfo, bindex, bbot);
 	au_br_do_del_hdp(au_di(root), bindex, bbot);
 	au_br_do_del_hip(au_ii(inode), bindex, bbot);
+	au_sbilist_write_unlock();
 
 	/* ignore an error */
 	au_dr_br_fin(sb, br); /* always, regardless the mount option */
@@ -1054,8 +1059,10 @@ int au_br_del(struct super_block *sb, struct au_opt_del *del, int remount)
 	}
 
 	sysaufs_brs_del(sb, bindex);	/* remove successors */
+	dbgaufs_xino_del(br);		/* remove one */
 	au_br_do_del(sb, bindex, br);
 	sysaufs_brs_add(sb, bindex);	/* append successors */
+	dbgaufs_brs_add(sb, bindex, /*topdown*/1);	/* rename successors */
 
 	if (!bindex) {
 		au_cpup_attr_all(d_inode(root), /*force*/1);

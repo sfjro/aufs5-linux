@@ -180,22 +180,29 @@ static int __init aufs_init(void)
 
 	au_sbilist_init();
 	sysaufs_brs_init();
+	au_debug_init();
 	au_dy_init();
 	err = sysaufs_init();
 	if (unlikely(err))
 		goto out;
-	err = au_procfs_init();
+	err = dbgaufs_init();
 	if (unlikely(err))
 		goto out_sysaufs;
+	err = au_procfs_init();
+	if (unlikely(err))
+		goto out_dbgaufs;
 	err = au_wkq_init();
 	if (unlikely(err))
 		goto out_procfs;
 	err = au_hnotify_init();
 	if (unlikely(err))
 		goto out_wkq;
-	err = au_cache_init();
+	err = au_sysrq_init();
 	if (unlikely(err))
 		goto out_hin;
+	err = au_cache_init();
+	if (unlikely(err))
+		goto out_sysrq;
 
 	err = register_filesystem(&aufs_fs_type);
 	if (unlikely(err))
@@ -207,12 +214,16 @@ static int __init aufs_init(void)
 
 out_cache:
 	au_cache_fin();
+out_sysrq:
+	au_sysrq_fin();
 out_hin:
 	au_hnotify_fin();
 out_wkq:
 	au_wkq_fin();
 out_procfs:
 	au_procfs_fin();
+out_dbgaufs:
+	dbgaufs_fin();
 out_sysaufs:
 	sysaufs_fin();
 	au_dy_fin();

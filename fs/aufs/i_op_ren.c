@@ -281,10 +281,12 @@ static int au_ren_do_diropq(struct au_ren_args *a, int idx)
 static int au_ren_diropq(struct au_ren_args *a)
 {
 	int err;
+	unsigned char always;
 	struct dentry *d;
 
 	err = 0;
 	d = a->dst_dentry; /* already renamed on the branch */
+	always = !!au_opt_test(au_mntflags(d->d_sb), ALWAYS_DIROPQ);
 	if (au_ftest_ren(a->auren_flags, ISDIR_SRC)
 	    && !au_ftest_ren(a->auren_flags, DIRREN)
 	    && a->btgt != au_dbdiropq(a->src_dentry)
@@ -292,7 +294,8 @@ static int au_ren_diropq(struct au_ren_args *a)
 		|| a->btgt <= au_dbdiropq(d)
 		/* hide the lower to keep xino */
 		/* the lowers may not be a dir, but we hide them anyway */
-		|| a->btgt < au_dbbot(d))) {
+		|| a->btgt < au_dbbot(d)
+		|| always)) {
 		AuDbg("here\n");
 		err = au_ren_do_diropq(a, AuSRC);
 		if (unlikely(err))
@@ -306,7 +309,8 @@ static int au_ren_diropq(struct au_ren_args *a)
 	if (au_ftest_ren(a->auren_flags, ISDIR_DST)
 	    && a->btgt != au_dbdiropq(a->dst_dentry)
 	    && (a->btgt < au_dbdiropq(d)
-		|| a->btgt < au_dbbot(d))) {
+		|| a->btgt < au_dbbot(d)
+		|| always)) {
 		AuDbgDentry(a->src_dentry);
 		AuDbgDentry(a->dst_dentry);
 		err = au_ren_do_diropq(a, AuDST);
