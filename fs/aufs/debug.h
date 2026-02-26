@@ -15,6 +15,7 @@
 #include <linux/atomic.h>
 #include <linux/module.h>
 #include <linux/kallsyms.h>
+#include <linux/sysrq.h>
 
 #ifdef CONFIG_AUFS_DEBUG
 #define AuDebugOn(a)		BUG_ON(a)
@@ -115,6 +116,8 @@ void __au_dbg_verify_dinode(struct dentry *dentry, const char *func, int line);
 void au_dbg_verify_gen(struct dentry *parent, unsigned int sigen);
 void au_dbg_verify_kthread(void);
 
+int __init au_debug_init(void);
+
 #define AuDbgWhlist(w) do { \
 	mutex_lock(&au_dbg_mtx); \
 	AuDbg(#w "\n"); \
@@ -173,6 +176,7 @@ void au_dbg_verify_kthread(void);
 AuStubVoid(au_dbg_verify_dinode, struct dentry *dentry)
 AuStubVoid(au_dbg_verify_gen, struct dentry *parent, unsigned int sigen)
 AuStubVoid(au_dbg_verify_kthread, void)
+AuStubInt0(__init au_debug_init, void)
 
 AuStubVoid(AuDbgWhlist, struct au_nhash *whlist)
 AuStubVoid(AuDbgVdir, struct au_vdir *vdir)
@@ -183,6 +187,27 @@ AuStubVoid(AuDbgFile, struct file *filp)
 AuStubVoid(AuDbgSb, struct super_block *sb)
 AuStubVoid(AuDbgSym, void *addr)
 #endif /* CONFIG_AUFS_DEBUG */
+
+/* ---------------------------------------------------------------------- */
+
+#ifdef CONFIG_AUFS_MAGIC_SYSRQ
+int __init au_sysrq_init(void);
+void au_sysrq_fin(void);
+
+#ifdef CONFIG_HW_CONSOLE
+#define au_dbg_blocked() do { \
+	WARN_ON(1); \
+	handle_sysrq('w'); \
+} while (0)
+#else
+AuStubVoid(au_dbg_blocked, void)
+#endif
+
+#else
+AuStubInt0(__init au_sysrq_init, void)
+AuStubVoid(au_sysrq_fin, void)
+AuStubVoid(au_dbg_blocked, void)
+#endif /* CONFIG_AUFS_MAGIC_SYSRQ */
 
 #endif /* __KERNEL__ */
 #endif /* __AUFS_DEBUG_H__ */

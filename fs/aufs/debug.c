@@ -402,11 +402,31 @@ void au_dbg_verify_gen(struct dentry *parent, unsigned int sigen)
 void au_dbg_verify_kthread(void)
 {
 	if (au_wkq_test()) {
-		/* au_dbg_blocked(); re-commit later */
+		au_dbg_blocked();
 		/*
 		 * It may be recursive, but udba=notify between two aufs mounts,
 		 * where a single ro branch is shared, is not a problem.
 		 */
 		/* WARN_ON(1); */
 	}
+}
+
+/* ---------------------------------------------------------------------- */
+
+int __init au_debug_init(void)
+{
+	aufs_bindex_t bindex;
+	struct au_vdir_destr destr;
+
+	bindex = -1;
+	AuDebugOn(bindex >= 0);
+
+	destr.len = -1;
+	AuDebugOn(destr.len < NAME_MAX);
+
+#ifdef CONFIG_4KSTACKS
+	pr_warn("CONFIG_4KSTACKS is defined.\n");
+#endif
+
+	return 0;
 }
