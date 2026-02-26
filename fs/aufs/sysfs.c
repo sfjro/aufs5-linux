@@ -7,6 +7,7 @@
  * sysfs interface
  */
 
+#include <linux/compat.h>
 #include <linux/seq_file.h>
 #include "aufs.h"
 
@@ -179,6 +180,91 @@ out_unlock:
 out:
 	return err;
 }
+
+/* ---------------------------------------------------------------------- */
+
+static int au_brinfo(struct super_block *sb, union aufs_brinfo __user *arg)
+{
+	int err;
+	int16_t brid;
+	aufs_bindex_t bindex, bbot;
+	size_t sz;
+	char *buf;
+	struct seq_file *seq;
+	struct au_branch *br;
+
+	si_read_lock(sb, AuLock_FLUSH);
+	bbot = au_sbbot(sb);
+	err = bbot + 1;
+	if (!arg)
+		goto out;
+
+	err = -ENOMEM;
+	buf = (void *)__get_free_page(GFP_NOFS);
+	if (unlikely(!buf))
+		goto out;
+
+	seq = au_seq(buf, PAGE_SIZE);
+	err = PTR_ERR(seq);
+	if (IS_ERR(seq))
+		goto out_buf;
+
+	sz = sizeof(*arg) - offsetof(union aufs_brinfo, path);
+	for (bindex = 0; bindex <= bbot; bindex++, arg++) {
+		/* VERIFY_WRITE */
+		err = !access_ok(arg, sizeof(*arg));
+		if (unlikely(err))
+			break;
+
+		br = au_sbr(sb, bindex);
+		brid = br->br_id;
+		BUILD_BUG_ON(sizeof(brid) != sizeof(arg->id));
+		err = __put_user(brid, &arg->id);
+		if (unlikely(err))
+			break;
+
+		BUILD_BUG_ON(sizeof(br->br_perm) != sizeof(arg->perm));
+		err = __put_user(br->br_perm, &arg->perm);
+		if (unlikely(err))
+			break;
+
+		err = au_seq_path(seq, &br->br_path);
+		if (unlikely(err))
+			break;
+		seq_putc(seq, '\0');
+		if (!seq_has_overflowed(seq)) {
+			err = copy_to_user(arg->path, seq->buf, seq->count);
+			seq->count = 0;
+			if (unlikely(err))
+				break;
+		} else {
+			err = -E2BIG;
+			goto out_seq;
+		}
+	}
+	if (unlikely(err))
+		err = -EFAULT;
+
+out_seq:
+	au_kfree_rcu(seq);
+out_buf:
+	free_page((unsigned long)buf);
+out:
+	si_read_unlock(sb);
+	return err;
+}
+
+long au_brinfo_ioctl(struct file *file, unsigned long arg)
+{
+	return au_brinfo(file->f_path.dentry->d_sb, (void __user *)arg);
+}
+
+#ifdef CONFIG_COMPAT
+long au_brinfo_compat_ioctl(struct file *file, unsigned long arg)
+{
+	return au_brinfo(file->f_path.dentry->d_sb, compat_ptr(arg));
+}
+#endif
 
 /* ---------------------------------------------------------------------- */
 

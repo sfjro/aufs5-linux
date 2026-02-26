@@ -191,10 +191,92 @@ static inline int au_br_wh_linkable(int brperm)
 
 /* ---------------------------------------------------------------------- */
 
+/* ioctl */
+enum {
+	/* readdir in userspace */
+	AuCtl_RDU,
+	AuCtl_RDU_INO,
+
+	AuCtl_WBR_FD,	/* pathconf wrapper */
+	AuCtl_BR	/* info about branches */
+};
+
+/* borrowed from linux/include/linux/kernel.h */
+#ifndef ALIGN
+#ifdef _GNU_SOURCE
+#define ALIGN(x, a)		__ALIGN_MASK(x, (typeof(x))(a)-1)
+#else
+#define ALIGN(x, a)		(((x) + (a) - 1) & ~((a) - 1))
+#endif
+#define __ALIGN_MASK(x, mask)	(((x)+(mask))&~(mask))
+#endif
+
 /* borrowed from linux/include/linux/compiler-gcc3.h */
 #ifndef __aligned
 #define __aligned(x)			__attribute__((aligned(x)))
 #endif
+
+#ifdef __KERNEL__
+#ifndef __packed
+#define __packed			__attribute__((packed))
+#endif
+#endif
+
+struct au_rdu_cookie {
+	uint64_t	h_pos;
+	int16_t		bindex;
+	uint8_t		flags;
+	uint8_t		pad;
+	uint32_t	generation;
+} __aligned(8);
+
+struct au_rdu_ent {
+	uint64_t	ino;
+	int16_t		bindex;
+	uint8_t		type;
+	uint8_t		nlen;
+	uint8_t		wh;
+	char		name[];
+} __aligned(8);
+
+static inline int au_rdu_len(int nlen)
+{
+	/* include the terminating NULL */
+	return ALIGN(sizeof(struct au_rdu_ent) + nlen + 1,
+		     sizeof(uint64_t));
+}
+
+union au_rdu_ent_ul {
+	struct au_rdu_ent __user	*e;
+	uint64_t			ul;
+};
+
+enum {
+	AufsCtlRduV_SZ,
+	AufsCtlRduV_End
+};
+
+struct aufs_rdu {
+	/* input */
+	union {
+		uint64_t	sz;	/* AuCtl_RDU */
+		uint64_t	nent;	/* AuCtl_RDU_INO */
+	};
+	union au_rdu_ent_ul	ent;
+	uint16_t		verify[AufsCtlRduV_End];
+
+	/* input/output */
+	uint32_t		blk;
+
+	/* output */
+	union au_rdu_ent_ul	tail;
+	/* number of entries which were added in a single call */
+	uint64_t		rent;
+	uint8_t			full;
+	uint8_t			shwh;
+
+	struct au_rdu_cookie	cookie;
+} __aligned(8);
 
 /* ---------------------------------------------------------------------- */
 
@@ -216,5 +298,33 @@ struct au_drinfo_fdata {
 #define AUFS_DRINFO_MAGIC_V1	('a' << 24 | 'd' << 16 | 'r' << 8 | 0x01)
 /* future */
 #define AUFS_DRINFO_MAGIC_V2	('a' << 24 | 'd' << 16 | 'r' << 8 | 0x02)
+
+/* ---------------------------------------------------------------------- */
+
+struct aufs_wbr_fd {
+	uint32_t	oflags;
+	int16_t		brid;
+} __aligned(8);
+
+/* ---------------------------------------------------------------------- */
+
+union aufs_brinfo {
+	/* PATH_MAX may differ between kernel-space and user-space */
+	char	_spacer[4096];
+	struct {
+		int16_t	id;
+		int	perm;
+		char	path[];
+	};
+} __aligned(8);
+
+/* ---------------------------------------------------------------------- */
+
+#define AuCtlType		'A'
+#define AUFS_CTL_RDU		_IOWR(AuCtlType, AuCtl_RDU, struct aufs_rdu)
+#define AUFS_CTL_RDU_INO	_IOWR(AuCtlType, AuCtl_RDU_INO, struct aufs_rdu)
+#define AUFS_CTL_WBR_FD		_IOW(AuCtlType, AuCtl_WBR_FD, \
+				     struct aufs_wbr_fd)
+#define AUFS_CTL_BRINFO		_IOW(AuCtlType, AuCtl_BR, union aufs_brinfo)
 
 #endif /* __AUFS_TYPE_H__ */
