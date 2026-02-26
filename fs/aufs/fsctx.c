@@ -29,6 +29,7 @@ static void au_fsctx_dump(struct au_opts *opts)
 		struct au_opt_add *add;
 		struct au_opt_xino *xino;
 		struct au_opt_xino_itrunc *xino_itrunc;
+		struct au_opt_wbr_create *create;
 	} u;
 	struct au_opt *opt;
 
@@ -59,6 +60,7 @@ static void au_fsctx_dump(struct au_opts *opts)
 		au_fsctx_TF(trunc_xino);
 		au_fsctx_TF(trunc_xib);
 		au_fsctx_TF(plink);
+		au_fsctx_TF(dio);
 #undef au_fsctx_TF
 
 		case Opt_trunc_xino_path:
@@ -73,6 +75,37 @@ static void au_fsctx_dump(struct au_opts *opts)
 
 		case Opt_list_plink:
 			AuLabel(list_plink);
+			break;
+		case Opt_wbr_create:
+			u.create = &opt->wbr_create;
+			AuDbg("create %d, %s\n", u.create->wbr_create,
+				  au_optstr_wbr_create(u.create->wbr_create));
+			switch (u.create->wbr_create) {
+			case AuWbrCreate_MFSV:
+				fallthrough;
+			case AuWbrCreate_PMFSV:
+				AuDbg("%d sec\n", u.create->mfs_second);
+				break;
+			case AuWbrCreate_MFSRR:
+				fallthrough;
+			case AuWbrCreate_TDMFS:
+				AuDbg("%llu watermark\n",
+					  u.create->mfsrr_watermark);
+				break;
+			case AuWbrCreate_MFSRRV:
+				fallthrough;
+			case AuWbrCreate_TDMFSV:
+				fallthrough;
+			case AuWbrCreate_PMFSRRV:
+				AuDbg("%llu watermark, %d sec\n",
+					  u.create->mfsrr_watermark,
+					  u.create->mfs_second);
+				break;
+			}
+			break;
+		case Opt_wbr_copyup:
+			AuDbg("copyup %d, %s\n", opt->wbr_copyup,
+				  au_optstr_wbr_copyup(opt->wbr_copyup));
 			break;
 
 		default:
@@ -116,6 +149,14 @@ const struct fs_parameter_spec aufs_fsctx_paramspec[] = {
 #ifdef CONFIG_AUFS_DEBUG
 	fsparam_flag("list_plink", Opt_list_plink),
 #endif
+
+	fsparam_flag_no("dio", Opt_dio),
+
+	fsparam_string("create", Opt_wbr_create),
+	fsparam_string("create_policy", Opt_wbr_create),
+	fsparam_string("cpup", Opt_wbr_copyup),
+	fsparam_string("copyup", Opt_wbr_copyup),
+	fsparam_string("copyup_policy", Opt_wbr_copyup),
 
 	/* internal use for the scripts */
 	fsparam_string("si", Opt_ignore_silent),
@@ -373,6 +414,23 @@ static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *para
 						 result.int_32);
 		break;
 
+	case Opt_wbr_create:
+		opt->wbr_create.wbr_create
+			= au_wbr_create_val(param->string, &opt->wbr_create);
+		if (opt->wbr_create.wbr_create >= 0)
+			err = 0;
+		else
+			errorf(fc, "wrong value, %s", param->key);
+		break;
+
+	case Opt_wbr_copyup:
+		opt->wbr_copyup = au_wbr_copyup_val(param->string);
+		if (opt->wbr_copyup >= 0)
+			err = 0;
+		else
+			errorfc(fc, "wrong value, %s", param->key);
+		break;
+
 	/* simple true/false flag */
 #define au_fsctx_TF(name)				\
 		case Opt_##name:			\
@@ -382,6 +440,7 @@ static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *para
 	au_fsctx_TF(trunc_xino);
 	au_fsctx_TF(trunc_xib);
 	au_fsctx_TF(plink);
+	au_fsctx_TF(dio);
 #undef au_fsctx_TF
 
 	case Opt_noxino:

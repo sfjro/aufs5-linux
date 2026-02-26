@@ -520,7 +520,8 @@ static void reinit_br_wh(void *arg)
 
 	inode_lock_nested(hdir->hi_inode, AuLsc_I_PARENT);
 	wbr_wh_write_lock(wbr);
-	err = au_h_verify(wbr->wbr_whbase, hdir->hi_inode, h_root, a->br);
+	err = au_h_verify(wbr->wbr_whbase, au_opt_udba(a->sb), hdir->hi_inode,
+			  h_root, a->br);
 	if (!err) {
 		h_path.dentry = wbr->wbr_whbase;
 		h_path.mnt = au_br_mnt(a->br);

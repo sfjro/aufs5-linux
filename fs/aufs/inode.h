@@ -21,6 +21,9 @@ struct vfsmount;
 struct au_hinode {
 	struct inode		*hi_inode;
 	aufs_bindex_t		hi_id;
+
+	/* reference to the copied-up whiteout with get/put */
+	struct dentry		*hi_whdentry;
 };
 
 struct au_iigen {
@@ -58,6 +61,7 @@ struct au_icntnr {
 struct au_pin {
 	/* input */
 	struct dentry *dentry;
+	unsigned int udba;
 	unsigned char lsc_di, lsc_hi, flags;
 	aufs_bindex_t bindex;
 
@@ -119,15 +123,17 @@ int au_test_h_perm_sio(struct mnt_idmap *h_idmap, struct inode *h_inode,
 struct dentry *au_pinned_h_parent(struct au_pin *pin);
 void au_pin_init(struct au_pin *pin, struct dentry *dentry,
 		 aufs_bindex_t bindex, int lsc_di, int lsc_hi,
-		 unsigned char flags);
+		 unsigned int udba, unsigned char flags);
 int au_pin(struct au_pin *pin, struct dentry *dentry, aufs_bindex_t bindex,
-	   unsigned char flags) __must_check;
+	   unsigned int udba, unsigned char flags) __must_check;
 int au_do_pin(struct au_pin *pin) __must_check;
 void au_unpin(struct au_pin *pin);
 
 /* iinfo.c */
 struct inode *au_h_iptr(struct inode *inode, aufs_bindex_t bindex);
 void au_hiput(struct au_hinode *hinode);
+void au_set_hi_wh(struct inode *inode, aufs_bindex_t bindex,
+		  struct dentry *h_wh);
 unsigned int au_hi_flags(struct inode *inode, int isdir);
 
 /* hinode flags */
@@ -142,6 +148,7 @@ void au_set_h_iptr(struct inode *inode, aufs_bindex_t bindex,
 		   struct inode *h_inode, unsigned int flags);
 
 void au_update_iigen(struct inode *inode, int half);
+void au_update_ibrange(struct inode *inode, int do_put_zero);
 
 void au_icntnr_init_once(void *_c);
 void au_hinode_init(struct au_hinode *hinode);
@@ -327,6 +334,12 @@ static inline aufs_bindex_t au_ibbot(struct inode *inode)
 {
 	IiMustAnyLock(inode);
 	return au_ii(inode)->ii_bbot;
+}
+
+static inline struct dentry *au_hi_wh(struct inode *inode, aufs_bindex_t bindex)
+{
+	IiMustAnyLock(inode);
+	return au_hinode(au_ii(inode), bindex)->hi_whdentry;
 }
 
 static inline void au_set_ibtop(struct inode *inode, aufs_bindex_t bindex)

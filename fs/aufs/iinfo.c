@@ -25,6 +25,7 @@ struct inode *au_h_iptr(struct inode *inode, aufs_bindex_t bindex)
 /* todo: hard/soft set? */
 void au_hiput(struct au_hinode *hinode)
 {
+	dput(hinode->hi_whdentry);
 	iput(hinode->hi_inode);
 }
 
@@ -76,6 +77,18 @@ void au_set_h_iptr(struct inode *inode, aufs_bindex_t bindex,
 	}
 }
 
+void au_set_hi_wh(struct inode *inode, aufs_bindex_t bindex,
+		  struct dentry *h_wh)
+{
+	struct au_hinode *hinode;
+
+	IiMustWriteLock(inode);
+
+	hinode = au_hinode(au_ii(inode), bindex);
+	AuDebugOn(hinode->hi_whdentry);
+	hinode->hi_whdentry = h_wh;
+}
+
 void au_update_iigen(struct inode *inode, int half)
 {
 	struct au_iinfo *iinfo;
@@ -88,6 +101,49 @@ void au_update_iigen(struct inode *inode, int half)
 	spin_lock(&iigen->ig_spin);
 	iigen->ig_generation = sigen;
 	spin_unlock(&iigen->ig_spin);
+}
+
+/* it may be called at remount time, too */
+void au_update_ibrange(struct inode *inode, int do_put_zero)
+{
+	struct au_iinfo *iinfo;
+	aufs_bindex_t bindex, bbot;
+
+	AuDebugOn(au_is_bad_inode(inode));
+	IiMustWriteLock(inode);
+
+	iinfo = au_ii(inode);
+	if (do_put_zero && iinfo->ii_btop >= 0) {
+		for (bindex = iinfo->ii_btop; bindex <= iinfo->ii_bbot;
+		     bindex++) {
+			struct inode *h_i;
+
+			h_i = au_hinode(iinfo, bindex)->hi_inode;
+			if (h_i
+			    && !vfsub_inode_nlink(h_i, AU_I_BRANCH)
+#if 0 /* re-commit later */
+			    && !iinfo->ii_tmpfile
+#endif
+				)
+				au_set_h_iptr(inode, bindex, NULL, 0);
+		}
+	}
+
+	iinfo->ii_btop = -1;
+	iinfo->ii_bbot = -1;
+	bbot = au_sbbot(inode->i_sb);
+	for (bindex = 0; bindex <= bbot; bindex++)
+		if (au_hinode(iinfo, bindex)->hi_inode) {
+			iinfo->ii_btop = bindex;
+			break;
+		}
+	if (iinfo->ii_btop >= 0)
+		for (bindex = bbot; bindex >= iinfo->ii_btop; bindex--)
+			if (au_hinode(iinfo, bindex)->hi_inode) {
+				iinfo->ii_bbot = bindex;
+				break;
+			}
+	AuDebugOn(iinfo->ii_btop > iinfo->ii_bbot);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -107,6 +163,7 @@ void au_hinode_init(struct au_hinode *hinode)
 {
 	hinode->hi_inode = NULL;
 	hinode->hi_id = -1;
+	hinode->hi_whdentry = NULL;
 }
 
 int au_iinfo_init(struct inode *inode)

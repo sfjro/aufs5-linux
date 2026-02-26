@@ -15,8 +15,9 @@ ccflags-y += -include ${srctree}/include/uapi/linux/aufs_type.h
 obj-$(CONFIG_AUFS_FS) += aufs.o
 aufs-y := module.o sbinfo.o super.o branch.o xino.o sysaufs.o opts.o fsctx.o \
 	wkq.o vfsub.o dcsub.o \
-	cpup.o whout.o \
+	cpup.o whout.o wbr_policy.o \
 	dinfo.o dentry.o \
+	dynop.o \
 	file.o \
 	dir.o \
 	iinfo.o inode.o i_op.o

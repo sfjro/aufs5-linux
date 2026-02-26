@@ -17,6 +17,34 @@
 #include "rwsem.h"
 #include "wkq.h"
 
+/* policies to select one among multiple writable branches */
+struct au_wbr_copyup_operations {
+	int (*copyup)(struct dentry *dentry);
+};
+
+#define AuWbr_DIR	BIT(0)		/* target is a dir */
+#define AuWbr_PARENT	BIT(1)		/* always require a parent */
+
+#define au_ftest_wbr(flags, name)	((flags) & AuWbr_##name)
+#define au_fset_wbr(flags, name)	{ (flags) |= AuWbr_##name; }
+#define au_fclr_wbr(flags, name)	{ (flags) &= ~AuWbr_##name; }
+
+struct au_wbr_create_operations {
+	int (*create)(struct dentry *dentry, unsigned int flags);
+	int (*init)(struct super_block *sb);
+	int (*fin)(struct super_block *sb);
+};
+
+struct au_wbr_mfs {
+	struct mutex	mfs_lock; /* protect this structure */
+	unsigned long	mfs_jiffy;
+	unsigned long	mfs_expire;
+	aufs_bindex_t	mfs_bindex;
+
+	unsigned long long	mfsrr_bytes;
+	unsigned long long	mfsrr_watermark;
+};
+
 #define AuPlink_NHASH 100
 static inline int au_plink_hash(ino_t ino)
 {
@@ -43,6 +71,18 @@ struct au_sbinfo {
 	unsigned int		si_last_br_id :
 				sizeof(aufs_bindex_t) * BITS_PER_BYTE - 1;
 	struct au_branch	**si_branch;
+
+	/* policy to select a writable branch */
+	unsigned char		si_wbr_copyup;
+	unsigned char		si_wbr_create;
+	struct au_wbr_copyup_operations *si_wbr_copyup_ops;
+	struct au_wbr_create_operations *si_wbr_create_ops;
+
+	/* round robin */
+	atomic_t		si_wbr_rr_next;
+
+	/* most free space */
+	struct au_wbr_mfs	si_wbr_mfs;
 
 	/* mount flags */
 	/* include/asm-ia64/siginfo.h defines a macro named si_flags */
@@ -86,6 +126,12 @@ struct au_sbinfo {
 
 /* ---------------------------------------------------------------------- */
 
+/* policy to select one among writable branches */
+#define AuWbrCopyup(sbinfo, ...) \
+	((sbinfo)->si_wbr_copyup_ops->copyup(__VA_ARGS__))
+#define AuWbrCreate(sbinfo, ...) \
+	((sbinfo)->si_wbr_create_ops->create(__VA_ARGS__))
+
 /* flags for si_read_lock()/aufs_read_lock()/di_read_lock() */
 #define AuLock_DW		BIT(0)		/* write-lock dentry */
 #define AuLock_IR		BIT(1)		/* read-lock inode */
@@ -115,6 +161,13 @@ aufs_bindex_t au_new_br_id(struct super_block *sb);
 
 int si_read_lock(struct super_block *sb, int flags);
 int si_write_lock(struct super_block *sb, int flags);
+
+/* wbr_policy.c */
+extern struct au_wbr_copyup_operations au_wbr_copyup_ops[];
+extern struct au_wbr_create_operations au_wbr_create_ops[];
+int au_cpdown_dirs(struct dentry *dentry, aufs_bindex_t bdst);
+int au_wbr_nonopq(struct dentry *dentry, aufs_bindex_t bindex);
+int au_wbr_do_copyup_bu(struct dentry *dentry, aufs_bindex_t btop);
 
 /* ---------------------------------------------------------------------- */
 

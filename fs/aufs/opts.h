@@ -24,6 +24,8 @@ enum {
 	Opt_trunc_xino_path, Opt_itrunc_xino,
 	Opt_trunc_xib,
 	Opt_plink, Opt_list_plink,
+	Opt_dio,
+	Opt_wbr_copyup, Opt_wbr_create,
 	Opt_tail, Opt_ignore, Opt_ignore_silent, Opt_err
 };
 
@@ -33,15 +35,27 @@ enum {
 #define AuOpt_XINO		BIT(0)		/* external inode number bitmap
 						   and translation table */
 #define AuOpt_TRUNC_XINO	BIT(1)		/* truncate xino files */
+#define AuOpt_UDBA_NONE		BIT(2)		/* users direct branch access */
+#define AuOpt_UDBA_REVAL	BIT(3)
 #define AuOpt_PLINK		BIT(6)		/* pseudo-link */
+#define AuOpt_DIO		BIT(13)		/* direct io */
 
 #define AuOpt_Def	(AuOpt_XINO \
-			 | AuOpt_PLINK)
+			 | AuOpt_UDBA_REVAL \
+			 | AuOpt_PLINK \
+			 | AuOpt_DIO)
+#define AuOptMask_UDBA	(AuOpt_UDBA_NONE \
+			 | AuOpt_UDBA_REVAL)
 
 #define AuOpt_LkupDirFlags	(LOOKUP_FOLLOW | LOOKUP_DIRECTORY)
 
 #define au_opt_test(flags, name)	(flags & AuOpt_##name)
 #define au_opt_set(flags, name) do { \
+	BUILD_BUG_ON(AuOpt_##name & AuOptMask_UDBA); \
+	((flags) |= AuOpt_##name); \
+} while (0)
+#define au_opt_set_udba(flags, name) do { \
+	(flags) &= ~AuOptMask_UDBA; \
 	((flags) |= AuOpt_##name); \
 } while (0)
 #define au_opt_clr(flags, name) do { \
@@ -56,6 +70,34 @@ static inline unsigned int au_opts_plink(unsigned int mntflags)
 	return mntflags & ~AuOpt_PLINK;
 #endif
 }
+
+/* ---------------------------------------------------------------------- */
+
+/* policies to select one among multiple writable branches */
+enum {
+	AuWbrCreate_TDP,	/* top down parent */
+	AuWbrCreate_RR,		/* round robin */
+	AuWbrCreate_MFS,	/* most free space */
+	AuWbrCreate_MFSV,	/* mfs with seconds */
+	AuWbrCreate_MFSRR,	/* mfs then rr */
+	AuWbrCreate_MFSRRV,	/* mfs then rr with seconds */
+	AuWbrCreate_TDMFS,	/* top down regardless parent and mfs */
+	AuWbrCreate_TDMFSV,	/* top down regardless parent and mfs */
+	AuWbrCreate_PMFS,	/* parent and mfs */
+	AuWbrCreate_PMFSV,	/* parent and mfs with seconds */
+	AuWbrCreate_PMFSRR,	/* parent, mfs and round-robin */
+	AuWbrCreate_PMFSRRV,	/* plus seconds */
+
+	AuWbrCreate_Def = AuWbrCreate_TDP
+};
+
+enum {
+	AuWbrCopyup_TDP,	/* top down parent */
+	AuWbrCopyup_BUP,	/* bottom up parent */
+	AuWbrCopyup_BU,		/* bottom up */
+
+	AuWbrCopyup_Def = AuWbrCopyup_TDP
+};
 
 /* ---------------------------------------------------------------------- */
 
@@ -77,12 +119,20 @@ struct au_opt_xino_itrunc {
 	aufs_bindex_t	bindex;
 };
 
+struct au_opt_wbr_create {
+	int			wbr_create;
+	int			mfs_second;
+	unsigned long long	mfsrr_watermark;
+};
+
 struct au_opt {
 	int type;
 	union {
 		struct au_opt_xino	xino;
 		struct au_opt_xino_itrunc xino_itrunc;
 		struct au_opt_add	add;
+		struct au_opt_wbr_create wbr_create;
+		int			wbr_copyup;
 		bool			tf; /* generic flag, true or false */
 		/* add more later */
 	};
@@ -90,6 +140,7 @@ struct au_opt {
 
 /* opts flags */
 #define AuOpts_TRUNC_XIB	BIT(2)
+#define AuOpts_REFRESH_DYAOP	BIT(3)
 #define au_ftest_opts(flags, name)	((flags) & AuOpts_##name)
 #define au_fset_opts(flags, name) \
 	do { (flags) |= AuOpts_##name; } while (0)
@@ -109,6 +160,12 @@ struct au_opts {
 /* opts.c */
 int au_br_perm_val(char *perm);
 void au_optstr_br_perm(au_br_perm_str_t *str, int perm);
+int au_udba_val(char *str);
+const char *au_optstr_udba(int udba);
+int au_wbr_create_val(char *str, struct au_opt_wbr_create *create);
+const char *au_optstr_wbr_create(int wbr_create);
+int au_wbr_copyup_val(char *str);
+const char *au_optstr_wbr_copyup(int wbr_copyup);
 
 int au_opt_add(struct au_opt *opt, char *opt_str, unsigned long sb_flags,
 	       aufs_bindex_t bindex);
@@ -116,6 +173,8 @@ struct super_block;
 int au_opts_verify(struct super_block *sb, unsigned long sb_flags,
 		   unsigned int pending);
 int au_opts_mount(struct super_block *sb, struct au_opts *opts);
+
+unsigned int au_opt_udba(struct super_block *sb);
 
 /* fsctx.c */
 int aufs_fsctx_init(struct fs_context *fc);

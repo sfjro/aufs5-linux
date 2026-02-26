@@ -13,6 +13,7 @@
 #ifdef __KERNEL__
 
 #include <linux/mount.h>
+#include "dynop.h"
 #include "lcnt.h"
 #include "rwsem.h"
 #include "super.h"
@@ -50,7 +51,13 @@ struct au_wbr {
 #define wbr_whbase		wbr_wh[AuBrWh_BASE]	/* whiteout base */
 #define wbr_plink		wbr_wh[AuBrWh_PLINK]	/* pseudo-link dir */
 #define wbr_orph		wbr_wh[AuBrWh_ORPH]	/* dir for orphans */
+
+	/* mfs mode */
+	unsigned long long	wbr_bytes;
 };
+
+/* ext2 has 3 types of operations at least, ext3 has 4 */
+#define AuBrDynOp (AuDyLast * 4)
 
 /* sysfs entries */
 struct au_brsysfs {
@@ -72,6 +79,8 @@ struct au_branch {
 
 	int			br_perm;
 	struct path		br_path;
+	spinlock_t		br_dykey_lock;
+	struct au_dykey		*br_dykey[AuBrDynOp];
 	au_lcnt_t		br_nfiles;	/* opened files */
 	au_lcnt_t		br_count;	/* in-use for other */
 
@@ -223,6 +232,12 @@ static inline
 aufs_bindex_t au_sbr_id(struct super_block *sb, aufs_bindex_t bindex)
 {
 	return au_sbr(sb, bindex)->br_id;
+}
+
+static inline
+struct vfsmount *au_sbr_mnt(struct super_block *sb, aufs_bindex_t bindex)
+{
+	return au_br_mnt(au_sbr(sb, bindex));
 }
 
 static inline

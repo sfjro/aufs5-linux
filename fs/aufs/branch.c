@@ -17,6 +17,7 @@ static void au_br_do_free(struct au_branch *br)
 {
 	int i;
 	struct au_wbr *wbr;
+	struct au_dykey **key;
 
 	au_xino_put(br);
 
@@ -32,6 +33,13 @@ static void au_br_do_free(struct au_branch *br)
 		AuDebugOn(atomic_read(&wbr->wbr_wh_running));
 		AuRwDestroy(&wbr->wbr_wh_rwsem);
 	}
+
+	key = br->br_dykey;
+	for (i = 0; i < AuBrDynOp; i++, key++)
+		if (*key)
+			au_dy_put(*key);
+		else
+			break;
 
 	/* recursive lock, s_umount of branch's */
 	/* synchronize_rcu(); */ /* why? */
@@ -338,6 +346,7 @@ static int au_br_init(struct au_branch *br, struct super_block *sb,
 	err = 0;
 	br->br_perm = add->perm;
 	br->br_path = add->path; /* set first, path_get() later */
+	spin_lock_init(&br->br_dykey_lock);
 	au_lcnt_init(&br->br_nfiles, /*release*/NULL);
 	au_lcnt_init(&br->br_count, /*release*/NULL);
 	br->br_id = au_new_br_id(sb);

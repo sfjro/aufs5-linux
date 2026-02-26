@@ -100,6 +100,63 @@ static int au_show_brs(struct seq_file *seq, struct super_block *sb)
 	return err;
 }
 
+static void au_gen_fmt(char *fmt, int len, const char *pat, const char *append)
+{
+	char *p;
+
+	p = fmt;
+	while (*pat != ':')
+		*p++ = *pat++;
+	*p++ = *pat++;
+	strscpy(p, append, len - (p - fmt));
+	AuDebugOn(strlen(fmt) >= len);
+}
+
+/* re-commit later */ __maybe_unused
+static void au_show_wbr_create(struct seq_file *m, int v,
+			       struct au_sbinfo *sbinfo)
+{
+	const char *pat;
+	char fmt[32];
+	struct au_wbr_mfs *mfs;
+
+	AuRwMustAnyLock(&sbinfo->si_rwsem);
+
+	seq_puts(m, ",create=");
+	pat = au_optstr_wbr_create(v);
+	mfs = &sbinfo->si_wbr_mfs;
+	switch (v) {
+	case AuWbrCreate_TDP:
+	case AuWbrCreate_RR:
+	case AuWbrCreate_MFS:
+	case AuWbrCreate_PMFS:
+		seq_puts(m, pat);
+		break;
+	case AuWbrCreate_MFSRR:
+	case AuWbrCreate_TDMFS:
+	case AuWbrCreate_PMFSRR:
+		au_gen_fmt(fmt, sizeof(fmt), pat, "%llu");
+		seq_printf(m, fmt, mfs->mfsrr_watermark);
+		break;
+	case AuWbrCreate_MFSV:
+	case AuWbrCreate_PMFSV:
+		au_gen_fmt(fmt, sizeof(fmt), pat, "%lu");
+		seq_printf(m, fmt,
+			   jiffies_to_msecs(mfs->mfs_expire)
+			   / MSEC_PER_SEC);
+		break;
+	case AuWbrCreate_MFSRRV:
+	case AuWbrCreate_TDMFSV:
+	case AuWbrCreate_PMFSRRV:
+		au_gen_fmt(fmt, sizeof(fmt), pat, "%llu:%lu");
+		seq_printf(m, fmt, mfs->mfsrr_watermark,
+			   jiffies_to_msecs(mfs->mfs_expire) / MSEC_PER_SEC);
+		break;
+	default:
+		BUG();
+	}
+}
+
 /* re-commit later */ __maybe_unused
 static int au_show_xino(struct seq_file *seq, struct super_block *sb)
 {

@@ -196,6 +196,15 @@ static inline int au_test_nilfs(struct super_block *sb __maybe_unused)
 #endif
 }
 
+static inline int au_test_f2fs(struct super_block *sb __maybe_unused)
+{
+#if IS_ENABLED(CONFIG_F2FS_FS)
+	return sb->s_magic == F2FS_SUPER_MAGIC;
+#else
+	return 0;
+#endif
+}
+
 /* ---------------------------------------------------------------------- */
 /*
  * they can't be an aufs branch.
@@ -288,6 +297,15 @@ static inline int au_test_fs_rr(struct super_block *sb)
 		|| au_test_iso9660(sb)
 		|| au_test_cramfs(sb)
 		|| au_test_romfs(sb);
+}
+
+/*
+ * filesystems which requires inode-lock in open.
+ */
+static inline int au_test_fs_unlock_for_open(struct super_block *sb)
+{
+	return au_test_nfs(sb)
+		|| au_test_f2fs(sb);
 }
 
 #endif /* __KERNEL__ */
