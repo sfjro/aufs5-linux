@@ -21,10 +21,12 @@ int au_wh_test(struct mnt_idmap *h_idmap, struct path *h_ppath,
 	       const struct qstr *wh_name, int try_sio);
 int au_diropq_test(struct mnt_idmap *h_idmap, struct path *h_path);
 struct dentry;
+struct au_branch;
+struct dentry *au_whtmp_lkup(struct dentry *h_parent, struct au_branch *br,
+			     const struct qstr *prefix);
 struct inode;
 int au_wh_unlink_dentry(struct inode *h_dir, struct path *h_path,
 			struct dentry *dentry);
-struct au_branch;
 struct super_block;
 int au_wh_init(struct au_branch *br, struct super_block *sb);
 
