@@ -120,6 +120,7 @@ int au_finfo_init(struct file *file, struct au_fidir *fidir)
 	err = 0;
 	au_rw_write_lock(&finfo->fi_rwsem);
 	finfo->fi_btop = -1;
+	INIT_HLIST_BL_NODE(&finfo->fi_mf);
 	finfo->fi_hdir = fidir;
 	atomic_set(&finfo->fi_generation, au_digen(dentry));
 	/* smp_mb(); */ /* atomic_set */
