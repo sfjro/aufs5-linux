@@ -551,7 +551,7 @@ static int au_opt_simple(struct super_block *sb, struct au_opt *opt,
 static int au_opt_br(struct super_block *sb, struct au_opt *opt,
 		     struct au_opts *opts)
 {
-	int err;
+	int err, do_refresh;
 
 	err = 0;
 	switch (opt->type) {
@@ -582,6 +582,18 @@ static int au_opt_br(struct super_block *sb, struct au_opt *opt,
 			err = 1;
 			au_fset_opts(opts->flags, TRUNC_XIB);
 			au_fset_opts(opts->flags, REFRESH);
+		}
+		break;
+
+	case Opt_mod:
+	case Opt_imod:
+		err = au_br_mod(sb, &opt->mod,
+				au_ftest_opts(opts->flags, REMOUNT),
+				&do_refresh);
+		if (!err) {
+			err = 1;
+			if (do_refresh)
+				au_fset_opts(opts->flags, REFRESH);
 		}
 		break;
 	}
