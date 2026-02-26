@@ -252,6 +252,7 @@ static int aufs_show_options(struct seq_file *m, struct dentry *dentry)
 
 	AuBool(TRUNC_XINO, trunc_xino);
 	AuStr(UDBA, udba);
+	AuBool(SHWH, shwh);
 	AuBool(PLINK, plink);
 	AuBool(DIO, dio);
 	AuBool(DIRPERM1, dirperm1);
@@ -272,8 +273,10 @@ static int aufs_show_options(struct seq_file *m, struct dentry *dentry)
 	AuUInt(RDBLK, rdblk, sbinfo->si_rdblk);
 	AuUInt(RDHASH, rdhash, sbinfo->si_rdhash);
 
+	AuBool(DIRREN, dirren);
 	AuBool(SUM, sum);
 	/* AuBool(SUM_W, wsum); */
+	AuBool(WARN_PERM, warn_perm);
 	AuBool(VERBOSE, verbose);
 
 out:
@@ -817,6 +820,8 @@ static void aufs_kill_sb(struct super_block *sb)
 	if (au_opt_test(sbinfo->si_mntflags, PLINK))
 		au_plink_put(sb, /*verbose*/1);
 	au_xino_clr(sb);
+	if (root)
+		au_dr_opt_flush(sb);
 
 	if (root)
 		aufs_write_unlock(root);
