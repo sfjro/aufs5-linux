@@ -64,10 +64,10 @@ struct au_sbinfo {
 	struct au_rwsem		si_rwsem;
 
 	/*
-	 * dirty approach to protect sb->sb_inodes from
+	 * dirty approach to protect sb->sb_inodes and ->s_files (gone) from
 	 * remount.
 	 */
-	au_lcnt_t		si_ninodes;
+	au_lcnt_t		si_ninodes, si_nfiles;
 
 	/* branch management */
 	unsigned int		si_generation;
@@ -132,6 +132,9 @@ struct au_sbinfo {
 	wait_queue_head_t	si_plink_wq;
 	spinlock_t		si_plink_maint_lock;
 	pid_t			si_plink_maint_pid;
+
+	/* file list */
+	struct hlist_bl_head	si_files;
 
 	/* with/without getattr, brother of sb->s_d_op */
 	const struct inode_operations *si_iop_array;
