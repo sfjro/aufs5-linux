@@ -175,6 +175,7 @@ static void au_fsctx_dump(struct au_opts *opts)
 	union {
 		struct au_opt_add *add;
 		struct au_opt_del *del;
+		struct au_opt_mod *mod;
 		struct au_opt_xino *xino;
 		struct au_opt_xino_itrunc *xino_itrunc;
 		struct au_opt_wbr_create *create;
@@ -196,6 +197,13 @@ static void au_fsctx_dump(struct au_opts *opts)
 			u.del = &opt->del;
 			AuDbg("del {%s, %p}\n",
 			      u.del->pathname, u.del->h_path.dentry);
+			break;
+		case Opt_mod:
+			fallthrough;
+		case Opt_imod:
+			u.mod = &opt->mod;
+			AuDbg("mod {%s, 0x%x, %p}\n",
+				  u.mod->path, u.mod->perm, u.mod->h_root);
 			break;
 		case Opt_append:
 			u.add = &opt->add;
@@ -321,6 +329,8 @@ const struct fs_parameter_spec aufs_fsctx_paramspec[] = {
 
 	fsparam_path("del", Opt_del),
 	/* fsparam_s32("idel", Opt_idel), */
+	fsparam_path("mod", Opt_mod),
+	/* fsparam_string("imod", Opt_imod), */
 
 	fsparam_path("xino", Opt_xino),
 	fsparam_flag("noxino", Opt_noxino),
@@ -518,6 +528,91 @@ out:
 }
 #endif
 
+static int au_fsctx_parse_mod(struct fs_context *fc, struct au_opt_mod *mod,
+			      struct fs_parameter *param)
+{
+	int err;
+	struct path path;
+	char *p;
+
+	err = -ENOMEM;
+	/* will be freed by au_fsctx_free() */
+	mod->path = kmemdup_nul(param->string, param->size, GFP_NOFS);
+	if (unlikely(!mod->path))
+		goto out;
+
+	err = -EINVAL;
+	p = strchr(mod->path, '=');
+	if (unlikely(!p)) {
+		errorfc(fc, "no permission %s", mod->path);
+		goto out;
+	}
+
+	*p++ = 0;
+	err = vfsub_kern_path(mod->path, AuOpt_LkupDirFlags, &path);
+	if (unlikely(err)) {
+		errorfc(fc, "lookup failed %s (%d)", mod->path, err);
+		goto out;
+	}
+
+	mod->perm = au_br_perm_val(p);
+	AuDbg("mod path %s, perm 0x%x, %s", mod->path, mod->perm, p);
+	mod->h_root = dget(path.dentry);
+	path_put(&path);
+
+out:
+	AuTraceErr(err);
+	return err;
+}
+
+#if 0 /* reserved for future use */
+static int au_fsctx_parse_imod(struct fs_context *fc, struct au_opt_mod *mod,
+			       char *ibrspec)
+{
+	int err, n;
+	char *p;
+	struct super_block *sb;
+	struct dentry *root;
+	struct au_fsctx_opts *a = fc->fs_private;
+
+	sb = a->sb;
+	AuDebugOn(!sb);
+
+	err = -EINVAL;
+	p = strchr(ibrspec, ':');
+	if (unlikely(!p)) {
+		errorfc(fc, "no index, %s", ibrspec);
+		goto out;
+	}
+	*p++ = '\0';
+	err = kstrtoint(ibrspec, 0, &n);
+	if (unlikely(err)) {
+		errorfc(fc, "bad integer in %s", ibrspec);
+		goto out;
+	}
+	AuDbg("n %d\n", n);
+
+	root = sb->s_root;
+	aufs_read_lock(root, AuLock_FLUSH);
+	if (n < 0 || au_sbbot(sb) < n) {
+		errorfc(fc, "out of bounds, %d", bindex);
+		goto out_root;
+	}
+
+	err = 0;
+	mod->perm = au_br_perm_val(p);
+	AuDbg("mod path %s, perm 0x%x, %s\n",
+	      mod->path, mod->perm, p);
+	mod->h_root = dget(au_h_dptr(root, bindex));
+
+out_root:
+	aufs_read_unlock(root, !AuLock_IR);
+out:
+	AuTraceErr(err);
+	return err;
+}
+#endif
+
 static int au_fsctx_parse_xino(struct fs_context *fc,
 			       struct au_opt_xino *xino,
 			       struct fs_parameter *param)
@@ -666,6 +761,21 @@ static int au_fsctx_parse_param(struct fs_context *fc, struct fs_parameter *para
 		}
 		del->pathname = "(indexed)";
 		err = au_opts_parse_idel(fc, &opt->del, result.uint_32);
+		break;
+#endif
+
+	case Opt_mod:
+		err = au_fsctx_parse_mod(fc, &opt->mod, param);
+		break;
+#ifdef IMOD /* reserved for future use */
+	case Opt_imod:
+		if (!a->sb) {
+			err = 0;
+			a->skipped = 1;
+			break;
+		}
+		u.mod->path = "(indexed)";
+		err = au_opts_parse_imod(fc, &opt->mod, param->string);
 		break;
 #endif
 
@@ -863,7 +973,8 @@ static inline unsigned int is_colonopt(char *str)
 	do_test("prepend");
 	do_test("del");
 	/* do_test("idel"); */
-	/* add more later */
+	do_test("mod");
+	/* do_test("imod"); */
 #undef do_test
 
 	return 0;
@@ -920,11 +1031,16 @@ static void au_fsctx_opts_free(struct au_opts *opts)
 		case Opt_idel:
 			path_put(&opt->del.h_path);
 			break;
+		case Opt_mod:
+			kfree(opt->mod.path);
+			fallthrough;
+		case Opt_imod:
+			dput(opt->mod.h_root);
+			break;
 		case Opt_xino:
 			kfree(opt->xino.path);
 			fput(opt->xino.file);
 			break;
-		/* add more later */
 		}
 		opt++;
 	}
