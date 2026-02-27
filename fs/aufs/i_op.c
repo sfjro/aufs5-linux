@@ -1375,7 +1375,8 @@ static int au_is_special(struct inode *inode)
 	return (inode->i_mode & (S_IFBLK | S_IFCHR | S_IFIFO | S_IFSOCK));
 }
 
-static int aufs_update_time(struct inode *inode, int flags)
+static int aufs_update_time(struct inode *inode, enum fs_update_time type,
+			    unsigned int flags)
 {
 	int err;
 	aufs_bindex_t bindex;
@@ -1384,7 +1385,7 @@ static int aufs_update_time(struct inode *inode, int flags)
 	struct vfsmount *h_mnt;
 
 	sb = inode->i_sb;
-	WARN_ONCE((flags & S_ATIME) && !IS_NOATIME(inode),
+	WARN_ONCE(type == FS_UPD_ATIME && !IS_NOATIME(inode),
 		  "unexpected s_flags 0x%lx", sb->s_flags);
 
 	/* mmap_sem might be acquired already, cf. aufs_mmap() */
@@ -1399,7 +1400,7 @@ static int aufs_update_time(struct inode *inode, int flags)
 		h_mnt = au_sbr_mnt(sb, bindex);
 		err = vfsub_mnt_want_write(h_mnt);
 		if (!err) {
-			err = vfsub_update_time(h_inode, flags);
+			err = vfsub_update_time(h_inode, type, flags);
 			vfsub_mnt_drop_write(h_mnt);
 		}
 	} else if (au_is_special(h_inode)) {
@@ -1412,7 +1413,7 @@ static int aufs_update_time(struct inode *inode, int flags)
 		AuWarn1("timestamps for i%lu are ignored "
 			"since it is on readonly branch (hi%lu).\n",
 			inode->i_ino, h_inode->i_ino);
-	} else if (flags & ~S_ATIME) {
+	} else if (type != FS_UPD_ATIME) {
 		err = -EIO;
 		AuIOErr1("unexpected flags 0x%x\n", flags);
 		AuDebugOn(1);
@@ -1424,7 +1425,7 @@ static int aufs_update_time(struct inode *inode, int flags)
 	si_read_unlock(sb);
 	lockdep_on();
 
-	if (!err && (flags & S_VERSION))
+	if (!err && IS_I_VERSION(inode))
 		inode_inc_iversion(inode);
 
 	return err;
