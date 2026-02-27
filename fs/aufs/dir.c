@@ -548,7 +548,7 @@ static bool test_empty_cb(struct dir_context *ctx, const char *__name,
 	arg->err = 0;
 	au_fset_testempty(arg->flags, CALLED);
 	/* smp_mb(); */
-	if (is_dot_dotdot(name, namelen))
+	if (name_is_dot_dotdot(name, namelen))
 		goto out; /* success */
 
 	if (namelen <= AUFS_WH_PFX_LEN
