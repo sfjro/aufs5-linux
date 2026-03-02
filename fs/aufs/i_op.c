@@ -938,7 +938,7 @@ static int aufs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 		goto out;
 
 	err = -ENOMEM;
-	a = kzalloc(sizeof(*a), GFP_NOFS);
+	a = kzalloc_obj(*a, GFP_NOFS);
 	if (unlikely(!a))
 		goto out;
 
@@ -1092,7 +1092,7 @@ ssize_t au_sxattr(struct dentry *dentry, struct inode *inode,
 	IMustLock(inode);
 
 	err = -ENOMEM;
-	a = kzalloc(sizeof(*a), GFP_NOFS);
+	a = kzalloc_obj(*a, GFP_NOFS);
 	if (unlikely(!a))
 		goto out;
 

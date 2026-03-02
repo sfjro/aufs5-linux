@@ -952,7 +952,7 @@ int aufs_rename(struct mnt_idmap *idmap,
 
 	err = -ENOMEM;
 	BUILD_BUG_ON(sizeof(*a) > PAGE_SIZE);
-	a = kzalloc(sizeof(*a), GFP_NOFS);
+	a = kzalloc_obj(*a, GFP_NOFS);
 	if (unlikely(!a))
 		goto out;
 

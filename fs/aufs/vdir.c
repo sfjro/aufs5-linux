@@ -364,7 +364,7 @@ static struct au_vdir *alloc_vdir(struct file *file)
 	if (unlikely(!vdir))
 		goto out;
 
-	vdir->vd_deblk = kzalloc(sizeof(*vdir->vd_deblk), GFP_NOFS);
+	vdir->vd_deblk = kzalloc_obj(*vdir->vd_deblk, GFP_NOFS);
 	if (unlikely(!vdir->vd_deblk))
 		goto out_free;
 

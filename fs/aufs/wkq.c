@@ -220,7 +220,7 @@ static void wkq_func(struct work_struct *wk)
  */
 static int au_wkq_comp_alloc(struct au_wkinfo *wkinfo, struct completion **comp)
 {
-	*comp = kmalloc(sizeof(**comp), GFP_NOFS);
+	*comp = kmalloc_obj(**comp, GFP_NOFS);
 	if (*comp) {
 		init_completion(*comp);
 		wkinfo->comp = *comp;
@@ -308,7 +308,7 @@ int au_wkq_nowait(au_wkq_func_t func, void *args, struct super_block *sb,
 	 * it highly depends upon the implementation of workqueue.
 	 */
 	err = 0;
-	wkinfo = kmalloc(sizeof(*wkinfo), GFP_NOFS);
+	wkinfo = kmalloc_obj(*wkinfo, GFP_NOFS);
 	if (wkinfo) {
 		wkinfo->kobj = &au_sbi(sb)->si_kobj;
 		wkinfo->flags = flags & ~AuWkq_WAIT;

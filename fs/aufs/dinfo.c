@@ -28,7 +28,7 @@ struct au_dinfo *au_di_alloc(struct super_block *sb, unsigned int lsc)
 	nbr = au_sbbot(sb) + 1;
 	if (nbr <= 0)
 		nbr = 1;
-	dinfo->di_hdentry = kcalloc(nbr, sizeof(*dinfo->di_hdentry), GFP_NOFS);
+	dinfo->di_hdentry = kzalloc_objs(*dinfo->di_hdentry, nbr, GFP_NOFS);
 	if (dinfo->di_hdentry) {
 		au_rw_write_lock_nested(&dinfo->di_rwsem, lsc);
 		dinfo->di_btop = -1;
