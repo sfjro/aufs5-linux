@@ -319,7 +319,7 @@ void au_dpri_sb(struct super_block *sb)
 	} *a;
 
 	/* this function can be called from magic sysrq */
-	a = kzalloc(sizeof(*a), GFP_ATOMIC);
+	a = kzalloc_obj(*a, GFP_ATOMIC);
 	if (unlikely(!a)) {
 		dpri("no memory\n");
 		return;

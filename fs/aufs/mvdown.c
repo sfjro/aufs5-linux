@@ -618,7 +618,7 @@ int au_mvdown(struct dentry *dentry, struct aufs_mvdown __user *uarg)
 		goto out;
 
 	err = -ENOMEM;
-	args = kmalloc(sizeof(*args), GFP_NOFS);
+	args = kmalloc_obj(*args, GFP_NOFS);
 	if (unlikely(!args))
 		goto out;
 

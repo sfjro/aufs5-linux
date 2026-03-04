@@ -48,12 +48,12 @@ struct au_sbinfo *au_si_alloc(struct super_block *sb)
 	int err, i;
 
 	err = -ENOMEM;
-	sbinfo = kzalloc(sizeof(*sbinfo), GFP_NOFS);
+	sbinfo = kzalloc_obj(*sbinfo, GFP_NOFS);
 	if (unlikely(!sbinfo))
 		goto out;
 
 	/* will be reallocated separately */
-	sbinfo->si_branch = kzalloc(sizeof(*sbinfo->si_branch), GFP_NOFS);
+	sbinfo->si_branch = kzalloc_obj(*sbinfo->si_branch, GFP_NOFS);
 	if (unlikely(!sbinfo->si_branch))
 		goto out_sbinfo;
 

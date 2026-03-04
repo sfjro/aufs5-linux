@@ -252,7 +252,7 @@ static int add_simple(struct inode *dir, struct dentry *dentry,
 	IMustLock(dir);
 
 	err = -ENOMEM;
-	a = kmalloc(sizeof(*a), GFP_NOFS);
+	a = kmalloc_obj(*a, GFP_NOFS);
 	if (unlikely(!a))
 		goto out;
 	a->wr_dir_args.force_btgt = -1;
@@ -690,7 +690,7 @@ int aufs_link(struct dentry *src_dentry, struct inode *dir,
 	IMustLock(inode);
 
 	err = -ENOMEM;
-	a = kzalloc(sizeof(*a), GFP_NOFS);
+	a = kzalloc_obj(*a, GFP_NOFS);
 	if (unlikely(!a))
 		goto out;
 
@@ -847,7 +847,7 @@ struct dentry *aufs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	IMustLock(dir);
 
 	ret = ERR_PTR(-ENOMEM);
-	a = kmalloc(sizeof(*a), GFP_NOFS);
+	a = kmalloc_obj(*a, GFP_NOFS);
 	if (unlikely(!a))
 		goto out;
 

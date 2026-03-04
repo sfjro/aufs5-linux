@@ -616,7 +616,7 @@ static void kick_reinit_br_wh(struct super_block *sb, struct au_branch *br)
 		goto out;
 
 	/* ignore ENOMEM */
-	arg = kmalloc(sizeof(*arg), GFP_NOFS);
+	arg = kmalloc_obj(*arg, GFP_NOFS);
 	if (arg) {
 		/*
 		 * dec(wh_running), kfree(arg) and dec(br_count)
@@ -893,7 +893,7 @@ struct au_whtmp_rmdir *au_whtmp_rmdir_alloc(struct super_block *sb, gfp_t gfp)
 
 	SiMustAnyLock(sb);
 
-	whtmp = kzalloc(sizeof(*whtmp), gfp);
+	whtmp = kzalloc_obj(*whtmp, gfp);
 	if (unlikely(!whtmp)) {
 		whtmp = ERR_PTR(-ENOMEM);
 		goto out;

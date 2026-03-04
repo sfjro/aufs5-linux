@@ -1187,7 +1187,7 @@ int aufs_fsctx_init(struct fs_context *fc)
 
 	/* they will be freed by au_fsctx_free() */
 	err = -ENOMEM;
-	a = kzalloc(sizeof(*a), GFP_NOFS);
+	a = kzalloc_obj(*a, GFP_NOFS);
 	if (unlikely(!a))
 		goto out;
 	a->bindex = 0;

@@ -449,7 +449,7 @@ int au_xino_trunc(struct super_block *sb, aufs_bindex_t bindex, int idx_begin)
 	struct au_xino *xi;
 
 	err = -ENOMEM;
-	st = kmalloc(sizeof(*st), GFP_NOFS);
+	st = kmalloc_obj(*st, GFP_NOFS);
 	if (unlikely(!st))
 		goto out;
 
@@ -561,7 +561,7 @@ static void xino_try_trunc(struct super_block *sb, struct au_branch *br)
 		goto out;
 
 	/* lock and kfree() will be called in trunc_xino() */
-	args = kmalloc(sizeof(*args), GFP_NOFS);
+	args = kmalloc_obj(*args, GFP_NOFS);
 	if (unlikely(!args)) {
 		AuErr1("no memory\n");
 		goto out;
@@ -716,7 +716,7 @@ static int au_xino_new_async(struct super_block *sb, struct au_branch *br,
 	struct au_xino_do_new_async_args *arg;
 
 	err = -ENOMEM;
-	arg = kmalloc(sizeof(*arg), GFP_NOFS);
+	arg = kmalloc_obj(*arg, GFP_NOFS);
 	if (unlikely(!arg))
 		goto out;
 
@@ -834,7 +834,7 @@ int au_xino_write(struct super_block *sb, aufs_bindex_t bindex, ino_t h_ino,
 	file = au_xino_file(xi, calc.idx);
 	if (!file) {
 		/* store the inum pair into the list */
-		p = kmalloc(sizeof(*p), GFP_NOFS | __GFP_NOFAIL);
+		p = kmalloc_obj(*p, GFP_NOFS | __GFP_NOFAIL);
 		p->h_ino = h_ino;
 		p->ino = ino;
 		au_hbl_add(&p->node, &xi->xi_writing);
@@ -1237,11 +1237,11 @@ struct au_xino *au_xino_alloc(unsigned int nfile)
 {
 	struct au_xino *xi;
 
-	xi = kzalloc(sizeof(*xi), GFP_NOFS);
+	xi = kzalloc_obj(*xi, GFP_NOFS);
 	if (unlikely(!xi))
 		goto out;
 	xi->xi_nfile = nfile;
-	xi->xi_file = kcalloc(nfile, sizeof(*xi->xi_file), GFP_NOFS);
+	xi->xi_file = kzalloc_objs(*xi->xi_file, nfile, GFP_NOFS);
 	if (unlikely(!xi->xi_file))
 		goto out_free;
 

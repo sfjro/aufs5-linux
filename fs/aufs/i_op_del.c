@@ -312,7 +312,7 @@ int aufs_unlink(struct inode *dir, struct dentry *dentry)
 	IMustLock(dir);
 
 	err = -ENOMEM;
-	a = kmalloc(sizeof(*a), GFP_NOFS);
+	a = kmalloc_obj(*a, GFP_NOFS);
 	if (unlikely(!a))
 		goto out;
 
@@ -408,7 +408,7 @@ int aufs_rmdir(struct inode *dir, struct dentry *dentry)
 	IMustLock(dir);
 
 	err = -ENOMEM;
-	a = kmalloc(sizeof(*a), GFP_NOFS);
+	a = kmalloc_obj(*a, GFP_NOFS);
 	if (unlikely(!a))
 		goto out;
 

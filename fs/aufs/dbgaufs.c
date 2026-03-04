@@ -48,7 +48,7 @@ static int dbgaufs_xi_open(struct file *xf, struct file *file, int do_fcnt,
 	struct dbgaufs_arg *p;
 
 	err = -ENOMEM;
-	p = kmalloc(sizeof(*p), GFP_NOFS);
+	p = kmalloc_obj(*p, GFP_NOFS);
 	if (unlikely(!p))
 		goto out;
 

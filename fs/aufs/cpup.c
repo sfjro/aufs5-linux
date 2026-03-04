@@ -791,7 +791,7 @@ static int au_cpup_single(struct au_cp_generic *cpg, struct dentry *dst_parent)
 	} *a;
 
 	err = -ENOMEM;
-	a = kmalloc(sizeof(*a), GFP_NOFS);
+	a = kmalloc_obj(*a, GFP_NOFS);
 	if (unlikely(!a))
 		goto out;
 	a->h_src_attr.valid = 0;
