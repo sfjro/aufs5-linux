@@ -262,9 +262,10 @@ static inline void vfsub_touch_atime(struct vfsmount *h_mnt,
 }
 #endif
 
-static inline int vfsub_update_time(struct inode *h_inode, int flags)
+static inline int vfsub_update_time(struct inode *h_inode,
+				    enum fs_update_time type, int flags)
 {
-	return inode_update_time(h_inode, flags);
+	return !inode_update_time(h_inode, type, flags);
 	/* no vfsub_update_h_iattr() since we don't have struct path */
 }
 

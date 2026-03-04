@@ -221,7 +221,7 @@ static int au_hfsn_init_br(struct au_branch *br, int perm)
 		goto out;
 
 	err = -ENOMEM;
-	hfsn = kmalloc(sizeof(*hfsn), GFP_NOFS);
+	hfsn = kmalloc_obj(*hfsn, GFP_NOFS);
 	if (unlikely(!hfsn))
 		goto out;
 

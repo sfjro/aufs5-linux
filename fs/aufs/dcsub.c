@@ -26,7 +26,7 @@ int au_dpages_init(struct au_dcsub_pages *dpages, gfp_t gfp)
 	void *p;
 
 	err = -ENOMEM;
-	dpages->dpages = kmalloc(sizeof(*dpages->dpages), gfp);
+	dpages->dpages = kmalloc_obj(*dpages->dpages, gfp);
 	if (unlikely(!dpages->dpages))
 		goto out;
 

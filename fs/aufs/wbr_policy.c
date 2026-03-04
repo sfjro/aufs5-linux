@@ -406,7 +406,7 @@ static void au_mfs(struct dentry *dentry, struct dentry *parent)
 	/* reduce the stack usage */
 	struct kstatfs *st;
 
-	st = kmalloc(sizeof(*st), GFP_NOFS);
+	st = kmalloc_obj(*st, GFP_NOFS);
 	if (unlikely(!st)) {
 		AuWarn1("failed updating mfs(%d), ignored\n", -ENOMEM);
 		return;

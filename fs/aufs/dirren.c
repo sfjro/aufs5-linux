@@ -188,7 +188,7 @@ static int au_dr_hino_load(struct au_dr_br *dr, struct file *hinofile)
 			goto out_free;
 		}
 
-		ent = kmalloc(sizeof(*ent), GFP_NOFS);
+		ent = kmalloc_obj(*ent, GFP_NOFS);
 		if (!ent) {
 			err = -ENOMEM;
 			AuTraceErr(err);
@@ -881,7 +881,7 @@ int au_dr_rename(struct dentry *src, aufs_bindex_t bindex,
 	AuDbg("bindex %d\n", bindex);
 
 	err = -ENOMEM;
-	ent = kmalloc(sizeof(*ent), GFP_NOFS);
+	ent = kmalloc_obj(*ent, GFP_NOFS);
 	if (unlikely(!ent))
 		goto out;
 
@@ -1137,9 +1137,8 @@ int au_dr_lkup(struct au_do_lookup_args *lkup, struct dentry *dentry,
 	bbot = au_sbbot(sb);
 	w.ninfo = bbot + 1;
 	if (!lkup->dirren.drinfo) {
-		lkup->dirren.drinfo = kcalloc(w.ninfo,
-					      sizeof(*lkup->dirren.drinfo),
-					      GFP_NOFS);
+		lkup->dirren.drinfo = kzalloc_objs(*lkup->dirren.drinfo,
+						   w.ninfo, GFP_NOFS);
 		if (unlikely(!lkup->dirren.drinfo)) {
 			err = -ENOMEM;
 			goto out;

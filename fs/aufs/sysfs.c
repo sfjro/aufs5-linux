@@ -85,7 +85,7 @@ static struct seq_file *au_seq(char *p, ssize_t len)
 {
 	struct seq_file *seq;
 
-	seq = kzalloc(sizeof(*seq), GFP_NOFS);
+	seq = kzalloc_obj(*seq, GFP_NOFS);
 	if (seq) {
 		/* mutex_init(&seq.lock); */
 		seq->buf = p;

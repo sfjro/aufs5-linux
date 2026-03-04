@@ -365,7 +365,7 @@ int au_fhsm_br_alloc(struct au_branch *br)
 	int err;
 
 	err = 0;
-	br->br_fhsm = kmalloc(sizeof(*br->br_fhsm), GFP_NOFS);
+	br->br_fhsm = kmalloc_obj(*br->br_fhsm, GFP_NOFS);
 	if (br->br_fhsm)
 		au_br_fhsm_init(br->br_fhsm);
 	else

@@ -124,7 +124,7 @@ static struct au_branch *au_br_alloc(struct super_block *sb, int new_nbranch,
 	int err;
 
 	err = -ENOMEM;
-	add_branch = kzalloc(sizeof(*add_branch), GFP_NOFS);
+	add_branch = kzalloc_obj(*add_branch, GFP_NOFS);
 	if (unlikely(!add_branch))
 		goto out;
 	add_branch->br_xino = au_xino_alloc(/*nfile*/1);
@@ -136,8 +136,7 @@ static struct au_branch *au_br_alloc(struct super_block *sb, int new_nbranch,
 
 	if (au_br_writable(perm)) {
 		/* may be freed separately at changing the branch permission */
-		add_branch->br_wbr = kzalloc(sizeof(*add_branch->br_wbr),
-					     GFP_NOFS);
+		add_branch->br_wbr = kzalloc_obj(*add_branch->br_wbr, GFP_NOFS);
 		if (unlikely(!add_branch->br_wbr))
 			goto out_hnotify;
 	}
@@ -1347,8 +1346,7 @@ int au_br_mod(struct super_block *sb, struct au_opt_mod *mod, int remount,
 
 			if (unlikely(err)) {
 				rerr = -ENOMEM;
-				br->br_wbr = kzalloc(sizeof(*br->br_wbr),
-						     GFP_NOFS);
+				br->br_wbr = kzalloc_obj(*br->br_wbr, GFP_NOFS);
 				if (br->br_wbr)
 					rerr = au_wbr_init(br, sb, br->br_perm);
 				if (unlikely(rerr)) {
@@ -1361,7 +1359,7 @@ int au_br_mod(struct super_block *sb, struct au_opt_mod *mod, int remount,
 	} else if (au_br_writable(mod->perm)) {
 		/* ro --> rw */
 		err = -ENOMEM;
-		br->br_wbr = kzalloc(sizeof(*br->br_wbr), GFP_NOFS);
+		br->br_wbr = kzalloc_obj(*br->br_wbr, GFP_NOFS);
 		if (br->br_wbr) {
 			err = au_wbr_init(br, sb, mod->perm);
 			if (unlikely(err)) {
