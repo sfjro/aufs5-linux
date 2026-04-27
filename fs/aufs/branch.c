@@ -724,7 +724,7 @@ static int test_inode_busy(struct super_block *sb, aufs_bindex_t bindex,
 		    && au_h_iptr(i, bindex)
 		    && au_test_ibusy(i, btop, bbot)) {
 			err = -EBUSY;
-			AuVerbose(verbose, "busy i%lu\n", i->i_ino);
+			AuVerbose(verbose, "busy i%llu\n", i->i_ino);
 			AuDbgInode(i);
 		}
 		ii_read_unlock(i);

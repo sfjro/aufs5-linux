@@ -670,7 +670,7 @@ static int au_refresh_i(struct super_block *sb, unsigned int do_idop)
 			e = au_refresh_hinode_self(inode);
 			if (unlikely(e)) {
 				au_refresh_iop(inode, /*force_getattr*/1);
-				pr_err("error %d, i%lu\n", e, inode->i_ino);
+				pr_err("error %d, i%llu\n", e, inode->i_ino);
 				if (!err)
 					err = e;
 				/* go on even if err */

@@ -821,7 +821,7 @@ static int au_cpup_single(struct au_cp_generic *cpg, struct dentry *dst_parent)
 	if (dst_inode) {
 		if (unlikely(!plink)) {
 			err = -EIO;
-			AuIOErr("hi%lu(i%lu) exists on b%d "
+			AuIOErr("hi%llu(i%llu) exists on b%d "
 				"but plink is disabled\n",
 				dst_inode->i_ino, inode->i_ino, cpg->bdst);
 			goto out_mnt_write;
@@ -836,7 +836,7 @@ static int au_cpup_single(struct au_cp_generic *cpg, struct dentry *dst_parent)
 				goto out_mnt_write;
 			if (unlikely(d_is_negative(h_src))) {
 				err = -EIO;
-				AuIOErr("i%lu exists on b%d "
+				AuIOErr("i%llu exists on b%d "
 					"but not pseudo-linked\n",
 					inode->i_ino, cpg->bdst);
 				dput(h_src);

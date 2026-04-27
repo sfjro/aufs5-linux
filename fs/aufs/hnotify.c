@@ -429,7 +429,7 @@ static void au_hn_bh(void *_args)
 	AuDebugOn(!a->h_dir);
 	AuDebugOn(!a->dir);
 	AuDebugOn(!a->mask);
-	AuDbg("mask 0x%x, i%lu, hi%lu, hci%lu\n",
+	AuDbg("mask 0x%x, i%llu, hi%llu, hci%llu\n",
 	      a->mask, a->dir->i_ino, a->h_dir->i_ino,
 	      a->h_child_inode ? a->h_child_inode->i_ino : 0);
 
