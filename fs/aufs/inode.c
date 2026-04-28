@@ -398,7 +398,7 @@ new_ino:
 		}
 	}
 
-	AuDbg("i%lu\n", (unsigned long)ino);
+	AuDbg("i%llu\n", (unsigned long long)ino);
 	inode = au_iget_locked(sb, ino);
 	err = PTR_ERR(inode);
 	if (IS_ERR(inode))
@@ -452,9 +452,9 @@ new_ino:
 
 	if (unlikely(au_test_fs_unique_ino(h_inode)))
 		AuWarn1("Warning: Un-notified UDBA or repeatedly renamed dir,"
-			" b%d, %s, %pd, hi%lu, i%lu.\n",
+			" b%d, %s, %pd, hi%llu, i%llu.\n",
 			btop, au_sbtype(h_dentry->d_sb), dentry,
-			(unsigned long)h_ino, (unsigned long)ino);
+			(unsigned long long)h_ino, (unsigned long long)ino);
 	ino = 0;
 	err = au_xino_write(sb, btop, h_ino, /*ino*/0);
 	if (!err) {

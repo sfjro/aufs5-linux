@@ -426,7 +426,7 @@ static int au_brid_str(struct au_dr_brid *brid, struct inode *h_inode,
 	AuDebugOn(err > sz);
 	p += err;
 	sz -= err;
-	err = snprintf(p, sz, "_%llu", (unsigned long long)h_inode->i_ino);
+	err = snprintf(p, sz, "_%llu", h_inode->i_ino);
 	AuDebugOn(err > sz);
 	p += err;
 	sz -= err;
