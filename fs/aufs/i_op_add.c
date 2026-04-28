@@ -657,7 +657,7 @@ static int au_cpup_or_link(struct dentry *src_dentry, struct dentry *dentry,
 					 &a->h_path);
 			dput(h_src_dentry);
 		} else {
-			AuIOErr("no dentry found for hi%lu on b%d\n",
+			AuIOErr("no dentry found for hi%llu on b%d\n",
 				h_inode->i_ino, a->bdst);
 			err = -EIO;
 		}

@@ -115,7 +115,7 @@ static int do_pri_inode(aufs_bindex_t bindex, struct inode *inode, int hn,
 	}
 
 	ctime = inode_get_ctime(inode);
-	dpri("i%d: %p, i%lu, %s, cnt %d, nl %u?, 0%o, sz %llu, blk %llu,"
+	dpri("i%d: %p, i%llu, %s, cnt %d, nl %u?, 0%o, sz %llu, blk %llu,"
 	     " acl %p, def_acl %p,"
 	     " hn %d, ct %lld, np %lu, st 0x%x, f 0x%x, v %llu, g %x%s%.*s\n",
 	     bindex, inode,
@@ -160,7 +160,7 @@ void au_dpri_dalias(struct inode *inode)
 	struct dentry *d;
 
 	spin_lock(&inode->i_lock);
-	hlist_for_each_entry(d, &inode->i_dentry, d_u.d_alias)
+	for_each_alias(d, inode)
 		au_dpri_dentry(d);
 	spin_unlock(&inode->i_lock);
 }

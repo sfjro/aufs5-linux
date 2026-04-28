@@ -73,7 +73,7 @@ real_lookup:
 		 /* && h_inode */
 		 && !au_dr_lkup_h_ino(args, bindex, h_inode->i_ino)) {
 		AuDbg("b%d %pd ignored hi%llu\n", bindex, h_dentry,
-		      (unsigned long long)h_inode->i_ino);
+		      h_inode->i_ino);
 		goto out_neg;
 	}
 
@@ -304,7 +304,7 @@ out:
 
 /* subset of struct inode */
 struct au_iattr {
-	unsigned long		i_ino;
+	u64			i_ino;
 	/* unsigned int		i_nlink; */
 	kuid_t			i_uid;
 	kgid_t			i_gid;

@@ -137,7 +137,7 @@ void au_plink_list(struct super_block *sb)
 		hbl = sbinfo->si_plink + i;
 		hlist_bl_lock(hbl);
 		hlist_bl_for_each_entry(icntnr, pos, hbl, plink)
-			AuDbg("%lu\n", icntnr->vfs_inode.i_ino);
+			AuDbg("%llu\n", icntnr->vfs_inode.i_ino);
 		hlist_bl_unlock(hbl);
 	}
 }
@@ -186,7 +186,7 @@ static int plink_name(char *name, int len, struct inode *inode,
 	struct inode *h_inode;
 
 	h_inode = au_h_iptr(inode, bindex);
-	rlen = snprintf(name, len, "%lu.%lu", inode->i_ino, h_inode->i_ino);
+	rlen = snprintf(name, len, "%llu.%llu", inode->i_ino, h_inode->i_ino);
 	return rlen;
 }
 

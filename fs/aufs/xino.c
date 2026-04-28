@@ -1727,7 +1727,7 @@ out:
 	pindex = sbinfo->si_xib_last_pindex;
 	mutex_unlock(&sbinfo->si_xib_mtx);
 	ino = xib_calc_ino(pindex, free_bit);
-	AuDbg("i%lu\n", (unsigned long)ino);
+	AuDbg("i%llu\n", (unsigned long long)ino);
 	return ino;
 out_err:
 	mutex_unlock(&sbinfo->si_xib_mtx);

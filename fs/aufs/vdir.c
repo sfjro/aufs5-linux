@@ -853,9 +853,9 @@ int au_vdir_fill_de(struct file *file, struct dir_context *ctx)
 		deblk_end.deblk += deblk_sz;
 		while (!is_deblk_end(&vdir_cache->vd_last.p, &deblk_end)) {
 			de = vdir_cache->vd_last.p.de;
-			AuDbg("%.*s, off%lld, i%lu, dt%d\n",
+			AuDbg("%.*s, off%lld, i%llu, dt%d\n",
 			      de->de_str.len, de->de_str.name, ctx->pos,
-			      (unsigned long)de->de_ino, de->de_type);
+			      (unsigned long long)de->de_ino, de->de_type);
 			if (unlikely(!dir_emit(ctx, de->de_str.name,
 					       de->de_str.len, de->de_ino,
 					       de->de_type))) {
