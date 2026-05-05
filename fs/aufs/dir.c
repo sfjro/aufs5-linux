@@ -173,7 +173,7 @@ void au_dir_ts(struct inode *dir, aufs_bindex_t bindex)
 	if (!au_br_writable(perm))
 		goto out;
 
-	arg = kmalloc(sizeof(*arg), GFP_NOFS);
+	arg = kmalloc_obj(*arg, GFP_NOFS);
 	if (!arg)
 		goto out;
 
