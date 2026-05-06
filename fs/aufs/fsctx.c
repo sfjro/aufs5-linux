@@ -1069,9 +1069,10 @@ out:
  */
 static inline unsigned int is_colonopt(char *str)
 {
-#define do_test(name)					\
-	if (!strncmp(str, name ":", sizeof(name)))	\
-		return sizeof(name) - 1
+#define do_test(name) do {					\
+		if (!strncmp(str, name ":", sizeof(name)))	\
+			return sizeof(name) - 1;		\
+	} while (0)
 	do_test("br");
 	do_test("add");
 	do_test("ins");
