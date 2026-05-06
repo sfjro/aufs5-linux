@@ -22,7 +22,7 @@
 # define _IOC_READ	2U
 #endif
 
-#define _IOC(dir,type,nr,size) \
+#define _IOC(dir, type, nr, size) \
 	(((dir)  << _IOC_DIRSHIFT) | \
 	 ((type) << _IOC_TYPESHIFT) | \
 	 ((nr)   << _IOC_NRSHIFT) | \
@@ -30,9 +30,9 @@
 
 #define _IOC_TYPECHECK(t) (sizeof(t))
 
-#define _IOW(type,nr,size)	_IOC(_IOC_WRITE,(type),(nr),(_IOC_TYPECHECK(size)))
-#define _IOWR(type,nr,size)	_IOC(_IOC_READ|_IOC_WRITE,(type),(nr),(_IOC_TYPECHECK(size)))
+#define _IOW(type, nr, size)	_IOC(_IOC_WRITE, (type), (nr), (_IOC_TYPECHECK(size)))
+#define _IOWR(type, nr, size)	_IOC(_IOC_READ|_IOC_WRITE, (type), (nr), (_IOC_TYPECHECK(size)))
 
-extern int ioctl (int __fd, unsigned long int __request, ...);
+extern int ioctl(int __fd, unsigned long __request, ...);
 
 #endif /* _DUMMY_SYS_IOCTL_H */

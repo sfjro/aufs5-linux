@@ -5,6 +5,6 @@
 #ifndef O_RDWR
 #define O_RDWR		00000002
 #endif
-extern int open (const char *__file, int __oflag, ...);
+extern int open(const char *__file, int __oflag, ...);
 
 #endif /* _DUMMY_FCNTL_H */

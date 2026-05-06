@@ -7,6 +7,6 @@ typedef int pid_t;
 #  define __pid_t_defined
 # endif
 
-extern int close (int __fd);
+extern int close(int __fd);
 
 #endif /* _DUMMY_UNISTD_H */
