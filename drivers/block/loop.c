@@ -591,7 +591,6 @@ out_putf:
 
 /*
  * for AUFS
- * no get/put for file.
  */
 /* Just to make the compiler silence, declare it */
 struct file *loop_backing_file(struct super_block *sb);
@@ -599,11 +598,17 @@ struct file *loop_backing_file(struct super_block *sb)
 {
 	struct file *ret;
 	struct loop_device *l;
+	unsigned long flags;
 
 	ret = NULL;
 	if (MAJOR(sb->s_dev) == LOOP_MAJOR) {
 		l = sb->s_bdev->bd_disk->private_data;
+		/* slow? but it's safe */
+		spin_lock_irqsave(&l->lo_lock, flags);
 		ret = l->lo_backing_file;
+		if (ret)
+			get_file(ret);	/* callers have to call fput() */
+		spin_unlock_irqrestore(&l->lo_lock, flags);
 	}
 	return ret;
 }
