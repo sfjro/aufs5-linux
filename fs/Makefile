@@ -19,7 +19,7 @@ obj-y :=	open.o read_write.o file_table.o super.o \
 
 # don't move au_mf.o to the bottom of this file, otherwise it will
 # conflict with aufs-kbuild.patch.
-ifeq (${CONFIG_AUFS_FS},m)
+ifeq ($(CONFIG_AUFS_FS),m)
 obj-y += au_mf.o
 endif
 
@@ -135,4 +135,4 @@ obj-$(CONFIG_VBOXSF_FS)		+= vboxsf/
 obj-$(CONFIG_ZONEFS_FS)		+= zonefs/
 obj-$(CONFIG_BPF_LSM)		+= bpf_fs_kfuncs.o
 obj-$(CONFIG_RESCTRL_FS)	+= resctrl/
-obj-$(CONFIG_AUFS_FS)           += aufs/
+obj-$(CONFIG_AUFS_FS)		+= aufs/
