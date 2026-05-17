@@ -21,9 +21,8 @@ BUILD_BUG_ON_MSG(1, "CONFIG_AUFS_FS is disabled.");
 
 const struct path *au_file_user_path(struct file *f)
 {
-	const struct path *path,
-		*(*func)(struct file *f),
-		*au_do_file_user_path(struct file *f);
+	const struct path *path, *(*func)(struct file *f);
+	const struct path *au_do_file_user_path(struct file *f);
 
 	path = NULL;
 	func = symbol_get(au_do_file_user_path);
