@@ -331,6 +331,8 @@ static void au_fsctx_dump(struct au_opts *opts)
 
 /* ---------------------------------------------------------------------- */
 
+#define fsparam_path(NAME, OPT)	__fsparam(fs_param_is_string, NAME, OPT, 0, NULL)
+
 /*
  * For conditionally compiled mount options.
  * Instead of fsparam_flag_no(), use this macro to distinguish ignore_silent.

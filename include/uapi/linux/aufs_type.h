@@ -27,7 +27,7 @@
 #include <limits.h>
 #endif /* __KERNEL__ */
 
-#define AUFS_VERSION	"7.0"
+#define AUFS_VERSION	"7.x-rcN"
 
 /* todo? move this to linux-2.6.19/include/magic.h */
 #define AUFS_SUPER_MAGIC	('a' << 24 | 'u' << 16 | 'f' << 8 | 's')
@@ -241,12 +241,7 @@ enum {
 
 /* borrowed from linux/include/linux/kernel.h */
 #ifndef ALIGN
-#ifdef _GNU_SOURCE
-#define ALIGN(x, a)		__ALIGN_MASK(x, (typeof(x))(a)-1)
-#else
 #define ALIGN(x, a)		(((x) + (a) - 1) & ~((a) - 1))
-#endif
-#define __ALIGN_MASK(x, mask)	(((x)+(mask))&~(mask))
 #endif
 
 /* borrowed from linux/include/linux/compiler-gcc3.h */

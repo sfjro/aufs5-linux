@@ -1410,8 +1410,8 @@ static int aufs_update_time(struct inode *inode, enum fs_update_time type,
 		 * communicating. If we copied it up, then the communication
 		 * would be corrupted.
 		 */
-		AuWarn1("timestamps for i%lu are ignored "
-			"since it is on readonly branch (hi%lu).\n",
+		AuWarn1("timestamps for i%llu are ignored "
+			"since it is on readonly branch (hi%llu).\n",
 			inode->i_ino, h_inode->i_ino);
 	} else if (type != FS_UPD_ATIME) {
 		err = -EIO;
