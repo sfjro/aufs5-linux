@@ -158,7 +158,8 @@ static int au_hfsn_handle_event(struct fsnotify_group *group,
 	struct fsnotify_mark *inode_mark;
 
 	AuDebugOn(!(data_type == FSNOTIFY_EVENT_INODE
-		    || data_type == FSNOTIFY_EVENT_DENTRY));
+		    || data_type == FSNOTIFY_EVENT_DENTRY
+		    || data_type == FSNOTIFY_EVENT_RENAME));
 
 	err = 0;
 	/* if FS_UNMOUNT happens, there must be another bug */
