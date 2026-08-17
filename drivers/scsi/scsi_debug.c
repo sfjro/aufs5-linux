@@ -233,13 +233,6 @@ struct tape_block {
 #define SDEBUG_OPT_UNALIGNED_WRITE	0x20000
 #define SDEBUG_OPT_ALL_NOISE (SDEBUG_OPT_NOISE | SDEBUG_OPT_Q_NOISE | \
 			      SDEBUG_OPT_RESET_NOISE)
-#define SDEBUG_OPT_ALL_INJECTING (SDEBUG_OPT_RECOVERED_ERR | \
-				  SDEBUG_OPT_TRANSPORT_ERR | \
-				  SDEBUG_OPT_DIF_ERR | SDEBUG_OPT_DIX_ERR | \
-				  SDEBUG_OPT_SHORT_TRANSFER | \
-				  SDEBUG_OPT_HOST_BUSY | \
-				  SDEBUG_OPT_CMD_ABORT | \
-				  SDEBUG_OPT_UNALIGNED_WRITE)
 #define SDEBUG_OPT_RECOV_DIF_DIX (SDEBUG_OPT_RECOVERED_ERR | \
 				  SDEBUG_OPT_DIF_ERR | SDEBUG_OPT_DIX_ERR)
 
@@ -955,7 +948,6 @@ static bool sdebug_removable = DEF_REMOVABLE;
 static bool sdebug_clustering;
 static bool sdebug_host_lock = DEF_HOST_LOCK;
 static bool sdebug_strict = DEF_STRICT;
-static bool sdebug_any_injecting_opt;
 static bool sdebug_no_rwlock;
 static bool sdebug_verbose;
 static bool have_dif_prot;
@@ -4318,8 +4310,8 @@ static bool comp_write_worker(struct sdeb_store_info *sip, u64 lba, u32 num,
 	if (!res)
 		return res;
 	if (rest)
-		res = memcmp(fsp, arr + ((num - rest) * lb_size),
-			     rest * lb_size);
+		res = !memcmp(fsp, arr + ((num - rest) * lb_size),
+			      rest * lb_size);
 	if (!res)
 		return res;
 	if (compare_only)
@@ -5898,6 +5890,7 @@ static int resp_report_zones(struct scsi_cmnd *scp,
 	u32 alloc_len, rep_opts, rep_len;
 	bool partial;
 	u64 lba, zs_lba;
+	u64 arr_len;
 	u8 *arr = NULL, *desc;
 	u8 *cmd = scp->cmnd;
 	struct sdeb_zone_state *zsp = NULL;
@@ -5919,9 +5912,12 @@ static int resp_report_zones(struct scsi_cmnd *scp,
 		return check_condition_result;
 	}
 
-	rep_max_zones = (alloc_len - 64) >> ilog2(RZONES_DESC_HD);
+	rep_max_zones = (ALIGN((u64)alloc_len, RZONES_DESC_HD) - RZONES_DESC_HD) >>
+			ilog2(RZONES_DESC_HD);
+	rep_max_zones = min_t(unsigned int, rep_max_zones, devip->nr_zones);
+	arr_len = (u64)RZONES_DESC_HD * (rep_max_zones + 1);
 
-	arr = kzalloc(alloc_len, GFP_ATOMIC | __GFP_NOWARN);
+	arr = kzalloc(arr_len, GFP_ATOMIC | __GFP_NOWARN);
 	if (!arr) {
 		mk_sense_buffer(scp, ILLEGAL_REQUEST, INSUFF_RES_ASC,
 				INSUFF_RES_ASCQ);
@@ -6648,7 +6644,7 @@ static int scsi_debug_sdev_configure(struct scsi_device *sdp,
 	if (sdebug_ptype == TYPE_TAPE) {
 		if (!devip->tape_blocks[0]) {
 			devip->tape_blocks[0] =
-				kzalloc_objs(struct tape_block, TAPE_UNITS);
+				kzalloc_objs(struct tape_block, TAPE_UNITS + 1);
 			if (!devip->tape_blocks[0])
 				return 1;
 		}
@@ -7528,7 +7524,6 @@ static int scsi_debug_write_info(struct Scsi_Host *host, char *buffer,
 		return -EINVAL;
 	sdebug_opts = opts;
 	sdebug_verbose = !!(SDEBUG_OPT_NOISE & opts);
-	sdebug_any_injecting_opt = !!(SDEBUG_OPT_ALL_INJECTING & opts);
 	if (sdebug_every_nth != 0)
 		tweak_cmnd_count();
 	return length;
@@ -7748,7 +7743,6 @@ static ssize_t opts_store(struct device_driver *ddp, const char *buf,
 opts_done:
 	sdebug_opts = opts;
 	sdebug_verbose = !!(SDEBUG_OPT_NOISE & opts);
-	sdebug_any_injecting_opt = !!(SDEBUG_OPT_ALL_INJECTING & opts);
 	tweak_cmnd_count();
 	return count;
 }
@@ -9659,7 +9653,6 @@ static int sdebug_driver_probe(struct device *dev)
 		scsi_host_set_guard(hpnt, SHOST_DIX_GUARD_CRC);
 
 	sdebug_verbose = !!(SDEBUG_OPT_NOISE & sdebug_opts);
-	sdebug_any_injecting_opt = !!(SDEBUG_OPT_ALL_INJECTING & sdebug_opts);
 	if (sdebug_every_nth)	/* need stats counters for every_nth */
 		sdebug_statistics = true;
 	error = scsi_add_host(hpnt, &sdbg_host->dev);

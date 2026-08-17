@@ -913,7 +913,7 @@ static bool ata_scsi_lpm_supported(struct ata_port *ap)
 		return false;
 
 	ata_for_each_link(link, ap, EDGE) {
-		ata_for_each_dev(dev, &ap->link, ENABLED) {
+		ata_for_each_dev(dev, link, ENABLED) {
 			if (dev->quirks & ATA_QUIRK_NOLPM)
 				return false;
 		}
@@ -1377,9 +1377,10 @@ EXPORT_SYMBOL_GPL(ata_sas_sdev_configure);
  */
 
 int ata_sas_queuecmd(struct scsi_cmnd *cmd, struct ata_port *ap)
+	__must_hold(ap->lock)
 {
 	if (likely(ata_dev_enabled(ap->link.device)))
-		return __ata_scsi_queuecmd(cmd, ap->link.device);
+		return __ata_scsi_queuecmd(cmd, ap->link.device, ap);
 
 	cmd->result = (DID_BAD_TARGET << 16);
 	scsi_done(cmd);

@@ -783,6 +783,10 @@ int smu_v13_0_6_get_metrics_table(struct smu_context *smu, void *metrics_table,
 		if (ret)
 			return ret;
 
+		if (!memchr_inv(smu_table->metrics_table, 0xff,
+				min(16, table_size)))
+			return -EHWPOISON;
+
 		smu_table->metrics_time = jiffies;
 	}
 
@@ -1317,7 +1321,8 @@ static int smu_v13_0_6_get_smu_metrics_data(struct smu_context *smu,
 		*value = SMUQ10_ROUND(GET_METRIC_FIELD(DramBandwidthUtilization, version));
 		break;
 	case METRICS_CURR_SOCKETPOWER:
-		*value = SMUQ10_ROUND(GET_METRIC_FIELD(SocketPower, version)) << 8;
+		*value = SMUQ10_ROUND(GET_METRIC_FIELD(SocketPower, version)) *
+			 MILLIWATT_PER_WATT;
 		break;
 	case METRICS_TEMPERATURE_HOTSPOT:
 		*value = SMUQ10_ROUND(GET_METRIC_FIELD(MaxSocketTemperature, version)) *
@@ -2071,9 +2076,9 @@ static int smu_v13_0_6_set_soft_freq_limited_range(struct smu_context *smu,
 		return -EINVAL;
 
 	if (smu_dpm->dpm_level == AMD_DPM_FORCED_LEVEL_MANUAL) {
-		if (min >= max) {
+		if (min > max) {
 			dev_err(smu->adev->dev,
-				"Minimum clk should be less than the maximum allowed clock\n");
+				"Minimum clk should be less/equal to the maximum allowed clock\n");
 			return -EINVAL;
 		}
 

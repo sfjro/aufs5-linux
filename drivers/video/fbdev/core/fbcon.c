@@ -70,7 +70,6 @@
 #include <linux/printk.h>
 #include <linux/slab.h>
 #include <linux/fb.h>
-#include <linux/fbcon.h>
 #include <linux/vt_kern.h>
 #include <linux/selection.h>
 #include <linux/font.h>
@@ -769,7 +768,7 @@ static int fbcon_invalid_charcount(struct fb_info *info, unsigned charcount)
 	return 0;
 }
 
-#endif /* CONFIG_MISC_TILEBLITTING */
+#endif /* CONFIG_FB_TILEBLITTING */
 
 static void fbcon_release(struct fb_info *info)
 {
@@ -1274,6 +1273,7 @@ static void fbcon_deinit(struct vc_data *vc)
 	int idx;
 
 	fbcon_free_font(p);
+	p->mode = NULL;
 	idx = con2fb_map[vc->vc_num];
 
 	if (idx == -1)
@@ -1440,17 +1440,16 @@ static void fbcon_set_disp(struct fb_info *info, struct fb_var_screeninfo *var,
 	struct vc_data **default_mode, *vc;
 	struct vc_data *svc;
 	struct fbcon_par *par = info->fbcon_par;
-	int rows, cols;
-	unsigned long ret = 0;
+	int rows, cols, ret;
 
 	p = &fb_display[unit];
-
-	if (var_to_display(p, var, info))
-		return;
 
 	vc = vc_cons[unit].d;
 
 	if (!vc)
+		return;
+
+	if (var_to_display(p, var, info))
 		return;
 
 	default_mode = vc->vc_display_fg;
@@ -2407,6 +2406,7 @@ static int fbcon_do_set_font(struct vc_data *vc, int w, int h, int charcount,
 	int resize, ret, old_width, old_height, old_charcount;
 	font_data_t *old_fontdata = p->fontdata;
 	const u8 *old_data = vc->vc_font.data;
+	unsigned short old_hi_font_mask = vc->vc_hi_font_mask;
 
 	font_data_get(data);
 
@@ -2452,6 +2452,12 @@ err_out:
 	vc->vc_font.width = old_width;
 	vc->vc_font.height = old_height;
 	vc->vc_font.charcount = old_charcount;
+
+	/* Restore the hi_font state and screen buffer */
+	if (old_hi_font_mask && !vc->vc_hi_font_mask)
+		set_vc_hi_font(vc, true);
+	else if (!old_hi_font_mask && vc->vc_hi_font_mask)
+		set_vc_hi_font(vc, false);
 
 	font_data_put(data);
 
@@ -2602,8 +2608,9 @@ void fbcon_suspended(struct fb_info *info)
 		return;
 	vc = vc_cons[par->currcon].d;
 
-	/* Clear cursor, restore saved data */
-	fbcon_cursor(vc, false);
+	/* Clear cursor, restore saved data when in text mode */
+	if ((vc->vc_mode == KD_TEXT) && con_is_visible(vc))
+		fbcon_cursor(vc, false);
 }
 
 void fbcon_resumed(struct fb_info *info)
@@ -2615,7 +2622,9 @@ void fbcon_resumed(struct fb_info *info)
 		return;
 	vc = vc_cons[par->currcon].d;
 
-	update_screen(vc);
+	/* Update screen when in text mode only */
+	if ((vc->vc_mode == KD_TEXT) && con_is_visible(vc))
+		update_screen(vc);
 }
 
 static void fbcon_modechanged(struct fb_info *info)
@@ -2632,8 +2641,30 @@ static void fbcon_modechanged(struct fb_info *info)
 	    fbcon_info_from_console(par->currcon) != info)
 		return;
 
+	/*
+	 * Clear the selection before switching bitops.  Without this, the
+	 * clear_selection() inside vc_resize() below repaints the highlighted
+	 * cells through the new bitops while the console geometry(vc_rows/vc_cols)
+	 * has not been updated to match, so the repaint is computed from a
+	 * half-switched geometry and overflows the framebuffer address.
+	 * Pre-clearing makes that repaint a no-op.
+	 */
+	clear_selection();
+
 	p = &fb_display[vc->vc_num];
 	set_blitting_type(vc, info);
+
+	/*
+	 * Rebuild par->rotated.buf for the new rotation now that bitops have
+	 * switched.  The new putcs/cursor ops read this buffer; if it is still
+	 * sized for the old rotation, fbcon_putcs() and the cursor path reached
+	 * via update_screen() below overflow it.  Mirrors fbcon_switch(); fall
+	 * back to unrotated rendering on allocation failure.
+	 */
+	if (par->bitops->rotate_font && par->bitops->rotate_font(info, vc)) {
+		par->rotate = FB_ROTATE_UR;
+		set_blitting_type(vc, info);
+	}
 
 	if (con_is_visible(vc)) {
 		var_to_display(p, &info->var, info);
@@ -2665,6 +2696,9 @@ static void fbcon_set_all_vcs(struct fb_info *info)
 
 	if (!par || par->currcon < 0)
 		return;
+
+	/* See the comment in fbcon_modechanged(). */
+	clear_selection();
 
 	for (i = first_fb_vc; i <= last_fb_vc; i++) {
 		vc = vc_cons[i].d;
@@ -2699,7 +2733,6 @@ void fbcon_update_vcs(struct fb_info *info, bool all)
 	else
 		fbcon_modechanged(info);
 }
-EXPORT_SYMBOL(fbcon_update_vcs);
 
 /* let fbcon check if it supports a new screen resolution */
 int fbcon_modechange_possible(struct fb_info *info, struct fb_var_screeninfo *var)
@@ -2727,7 +2760,6 @@ int fbcon_modechange_possible(struct fb_info *info, struct fb_var_screeninfo *va
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(fbcon_modechange_possible);
 
 int fbcon_mode_deleted(struct fb_info *info,
 		       struct fb_videomode *mode)

@@ -1137,6 +1137,9 @@ EXPORT_SYMBOL_GPL(vhost_dev_set_owner);
 
 static struct vhost_iotlb *iotlb_alloc(void)
 {
+	if (max_iotlb_entries <= 0)
+		return NULL;
+
 	return vhost_iotlb_alloc(max_iotlb_entries,
 				 VHOST_IOTLB_FLAG_RETIRE);
 }
@@ -1522,6 +1525,7 @@ static void vhost_dev_unlock_vqs(struct vhost_dev *d)
 static inline int vhost_get_avail_idx(struct vhost_virtqueue *vq)
 {
 	__virtio16 idx;
+	u16 avail_idx;
 	int r;
 
 	r = vhost_get_avail(vq, idx, &vq->avail->idx);
@@ -1532,16 +1536,18 @@ static inline int vhost_get_avail_idx(struct vhost_virtqueue *vq)
 	}
 
 	/* Check it isn't doing very strange thing with available indexes */
-	vq->avail_idx = vhost16_to_cpu(vq, idx);
-	if (unlikely((u16)(vq->avail_idx - vq->last_avail_idx) > vq->num)) {
+	avail_idx = vhost16_to_cpu(vq, idx);
+	if (unlikely((u16)(avail_idx - vq->last_avail_idx) > vq->num)) {
 		vq_err(vq, "Invalid available index change from %u to %u",
-		       vq->last_avail_idx, vq->avail_idx);
+		       vq->last_avail_idx, avail_idx);
 		return -EINVAL;
 	}
 
 	/* We're done if there is nothing new */
-	if (vq->avail_idx == vq->last_avail_idx)
+	if (avail_idx == vq->avail_idx)
 		return 0;
+
+	vq->avail_idx = avail_idx;
 
 	/*
 	 * We updated vq->avail_idx so we need a memory barrier between
@@ -1978,6 +1984,8 @@ static long vhost_set_memory(struct vhost_dev *d, struct vhost_memory __user *m)
 		return -EOPNOTSUPP;
 	if (mem.nregions > max_mem_regions)
 		return -E2BIG;
+	if (max_iotlb_entries <= 0)
+		return -EINVAL;
 	newmem = kvzalloc_flex(*newmem, regions, mem.nregions);
 	if (!newmem)
 		return -ENOMEM;
@@ -2122,6 +2130,14 @@ static long vhost_vring_set_num_addr(struct vhost_dev *d,
 	default:
 		BUG();
 	}
+
+	/*
+	 * The metadata cache holds the IOTLB mapping that backed the previous
+	 * desc/avail/used addresses and vring size, both of which are being
+	 * replaced here.  iotlb_access_ok() takes a cache hit as proof that the
+	 * region was validated, so the stale entries have to go.
+	 */
+	__vhost_vq_meta_reset(vq);
 
 	mutex_unlock(&vq->mutex);
 
@@ -2271,6 +2287,9 @@ int vhost_init_device_iotlb(struct vhost_dev *d)
 {
 	struct vhost_iotlb *niotlb, *oiotlb;
 	int i;
+
+	if (max_iotlb_entries <= 0)
+		return -EINVAL;
 
 	niotlb = iotlb_alloc();
 	if (!niotlb)
@@ -3320,18 +3339,6 @@ void vhost_set_backend_features(struct vhost_dev *dev, u64 features)
 	mutex_unlock(&dev->mutex);
 }
 EXPORT_SYMBOL_GPL(vhost_set_backend_features);
-
-static int __init vhost_init(void)
-{
-	return 0;
-}
-
-static void __exit vhost_exit(void)
-{
-}
-
-module_init(vhost_init);
-module_exit(vhost_exit);
 
 MODULE_VERSION("0.0.1");
 MODULE_LICENSE("GPL v2");

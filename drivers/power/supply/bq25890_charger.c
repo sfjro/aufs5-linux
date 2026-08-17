@@ -320,7 +320,7 @@ static const u32 bq25890_tspct_tbl[] = {
 	145, 140, 130, 120, 115, 110, 100, 90,
 	80, 70, 60, 50, 40, 30, 20, 10,
 	0, -10, -20, -30, -40, -60, -70, -80,
-	-90, -10, -120, -140, -150, -170, -190, -210,
+	-90, -100, -120, -140, -150, -170, -190, -210,
 };
 
 #define BQ25890_TSPCT_TBL_SIZE		ARRAY_SIZE(bq25890_tspct_tbl)
@@ -1617,11 +1617,11 @@ static const struct dev_pm_ops bq25890_pm = {
 };
 
 static const struct i2c_device_id bq25890_i2c_ids[] = {
-	{ "bq25890" },
-	{ "bq25892" },
-	{ "bq25895" },
-	{ "bq25896" },
-	{}
+	{ .name = "bq25890" },
+	{ .name = "bq25892" },
+	{ .name = "bq25895" },
+	{ .name = "bq25896" },
+	{ }
 };
 MODULE_DEVICE_TABLE(i2c, bq25890_i2c_ids);
 

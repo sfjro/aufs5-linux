@@ -136,7 +136,7 @@ struct eccprivkeytoken {
  * also checked. Returns 0 on success or errno value on failure.
  */
 int cca_check_secaeskeytoken(debug_info_t *dbg, int dbflvl,
-			     const u8 *token, int keybitsize);
+			     const u8 *token, u32 keysize, int keybitsize);
 
 /*
  * Simple check if the token is a valid CCA secure AES cipher key
@@ -146,8 +146,8 @@ int cca_check_secaeskeytoken(debug_info_t *dbg, int dbflvl,
  * Returns 0 on success or errno value on failure.
  */
 int cca_check_secaescipherkey(debug_info_t *dbg, int dbflvl,
-			      const u8 *token, int keybitsize,
-			      int checkcpacfexport);
+			      const u8 *token, u32 keysize,
+			      int keybitsize, int checkcpacfexport);
 
 /*
  * Simple check if the token is a valid CCA secure ECC private
@@ -235,7 +235,16 @@ int cca_findcard2(u32 *apqns, u32 *nr_apqns, u16 cardnr, u16 domain,
 
 /* struct to hold info for each CCA queue */
 struct cca_info {
-	int  hwtype;		/* one of the defined AP_DEVICE_TYPE_* */
+	u8   new_asym_mkvp[16];	/* verify pattern of new asym master key */
+	u8   cur_asym_mkvp[16];	/* verify pattern of current asym master key */
+	u8   old_asym_mkvp[16];	/* verify pattern of old asym master key */
+	u8   new_aes_mkvp[8];	/* truncated sha256 of new aes master key */
+	u8   cur_aes_mkvp[8];	/* truncated sha256 of current aes master key */
+	u8   old_aes_mkvp[8];	/* truncated sha256 of old aes master key */
+	u8   new_apka_mkvp[8];	/* truncated sha256 of new apka master key */
+	u8   cur_apka_mkvp[8];	/* truncated sha256 of current apka mk */
+	u8   old_apka_mkvp[8];	/* truncated sha256 of old apka mk */
+	char serial[9];		/* serial number (8 ascii numbers + 0x00) */
 	char new_aes_mk_state;	/* '1' empty, '2' partially full, '3' full */
 	char cur_aes_mk_state;	/* '1' invalid, '2' valid */
 	char old_aes_mk_state;	/* '1' invalid, '2' valid */
@@ -245,16 +254,7 @@ struct cca_info {
 	char new_asym_mk_state;	/* '1' empty, '2' partially full, '3' full */
 	char cur_asym_mk_state;	/* '1' invalid, '2' valid */
 	char old_asym_mk_state;	/* '1' invalid, '2' valid */
-	u8   new_aes_mkvp[8];	/* truncated sha256 of new aes master key */
-	u8   cur_aes_mkvp[8];	/* truncated sha256 of current aes master key */
-	u8   old_aes_mkvp[8];	/* truncated sha256 of old aes master key */
-	u8   new_apka_mkvp[8];	/* truncated sha256 of new apka master key */
-	u8   cur_apka_mkvp[8];	/* truncated sha256 of current apka mk */
-	u8   old_apka_mkvp[8];	/* truncated sha256 of old apka mk */
-	u8   new_asym_mkvp[16];	/* verify pattern of new asym master key */
-	u8   cur_asym_mkvp[16];	/* verify pattern of current asym master key */
-	u8   old_asym_mkvp[16];	/* verify pattern of old asym master key */
-	char serial[9];		/* serial number (8 ascii numbers + 0x00) */
+	int  hwtype;		/* one of the defined AP_DEVICE_TYPE_* */
 };
 
 /*

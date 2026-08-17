@@ -71,27 +71,44 @@ static inline void ntfs_rl_mc(struct runlist_element *dstbase, int dst,
  * On success, return a pointer to the newly allocated, or recycled, memory.
  * On error, return -errno.
  */
-struct runlist_element *ntfs_rl_realloc(struct runlist_element *rl,
-		int old_size, int new_size)
+static inline struct runlist_element *ntfs_rl_realloc_gfp(struct runlist_element *rl,
+		int old_size, int new_size, gfp_t gfp)
 {
 	struct runlist_element *new_rl;
+	size_t new_bytes;
 
-	old_size = old_size * sizeof(*rl);
-	new_size = new_size * sizeof(*rl);
+	if (old_size < 0 || new_size < 0)
+		return ERR_PTR(-EINVAL);
+
 	if (old_size == new_size)
 		return rl;
 
-	new_rl = kvzalloc(new_size, GFP_NOFS);
+	if (check_mul_overflow(new_size, sizeof(*rl), &new_bytes))
+		return ERR_PTR(-EINVAL);
+
+	new_rl = kvzalloc(new_bytes, gfp);
 	if (unlikely(!new_rl))
 		return ERR_PTR(-ENOMEM);
 
 	if (likely(rl != NULL)) {
-		if (unlikely(old_size > new_size))
-			old_size = new_size;
-		memcpy(new_rl, rl, old_size);
+		size_t old_bytes;
+
+		if (check_mul_overflow(old_size, sizeof(*rl), &old_bytes)) {
+			kvfree(new_rl);
+			return ERR_PTR(-EINVAL);
+		}
+		if (unlikely(old_bytes > new_bytes))
+			old_bytes = new_bytes;
+		memcpy(new_rl, rl, old_bytes);
 		kvfree(rl);
 	}
 	return new_rl;
+}
+
+struct runlist_element *ntfs_rl_realloc(struct runlist_element *rl,
+		int old_size, int new_size)
+{
+	return ntfs_rl_realloc_gfp(rl, old_size, new_size, GFP_NOFS);
 }
 
 /*
@@ -118,21 +135,8 @@ struct runlist_element *ntfs_rl_realloc(struct runlist_element *rl,
 static inline struct runlist_element *ntfs_rl_realloc_nofail(struct runlist_element *rl,
 		int old_size, int new_size)
 {
-	struct runlist_element *new_rl;
-
-	old_size = old_size * sizeof(*rl);
-	new_size = new_size * sizeof(*rl);
-	if (old_size == new_size)
-		return rl;
-
-	new_rl = kvmalloc(new_size, GFP_NOFS | __GFP_NOFAIL);
-	if (likely(rl != NULL)) {
-		if (unlikely(old_size > new_size))
-			old_size = new_size;
-		memcpy(new_rl, rl, old_size);
-		kvfree(rl);
-	}
-	return new_rl;
+	return ntfs_rl_realloc_gfp(rl, old_size, new_size,
+			GFP_NOFS | __GFP_NOFAIL);
 }
 
 /*
@@ -763,7 +767,7 @@ struct runlist_element *ntfs_mapping_pairs_decompress(const struct ntfs_volume *
 	buf = (u8 *)attr +
 		le16_to_cpu(attr->data.non_resident.mapping_pairs_offset);
 	attr_end = (u8 *)attr + le32_to_cpu(attr->length);
-	if (unlikely(buf < (u8 *)attr || buf > attr_end)) {
+	if (unlikely(buf < (u8 *)attr || buf >= attr_end)) {
 		ntfs_error(vol->sb, "Corrupt attribute.");
 		return ERR_PTR(-EIO);
 	}
@@ -811,7 +815,7 @@ struct runlist_element *ntfs_mapping_pairs_decompress(const struct ntfs_volume *
 		 */
 		b = *buf & 0xf;
 		if (b) {
-			if (unlikely(buf + b > attr_end))
+			if (unlikely(buf + b >= attr_end))
 				goto io_error;
 			for (deltaxcn = (s8)buf[b--]; b; b--)
 				deltaxcn = (deltaxcn << 8) + buf[b];
@@ -855,12 +859,16 @@ struct runlist_element *ntfs_mapping_pairs_decompress(const struct ntfs_volume *
 			u8 b2 = *buf & 0xf;
 
 			b = b2 + ((*buf >> 4) & 0xf);
-			if (buf + b > attr_end)
+			if (buf + b >= attr_end)
 				goto io_error;
 			for (deltaxcn = (s8)buf[b--]; b > b2; b--)
 				deltaxcn = (deltaxcn << 8) + buf[b];
 			/* Change the current lcn to its new value. */
-			lcn += deltaxcn;
+			if (unlikely(check_add_overflow(lcn, deltaxcn, &lcn))) {
+				ntfs_error(vol->sb,
+						"LCN overflow in mapping pairs array.");
+				goto err_out;
+			}
 #ifdef DEBUG
 			/*
 			 * On NTFS 1.2-, apparently can have lcn == -1 to
@@ -1817,7 +1825,7 @@ struct runlist_element *ntfs_rl_punch_hole(struct runlist_element *dst_rl, int d
 	    !ntfs_rle_contain(s_rl, start_vcn))
 		return ERR_PTR(-EINVAL);
 
-	begin_split = s_rl->vcn != start_vcn ? true : false;
+	begin_split = s_rl->vcn != start_vcn;
 
 	e_rl = ntfs_rl_find_vcn_nolock(dst_rl, end_vcn);
 	if (!e_rl ||
@@ -1825,10 +1833,10 @@ struct runlist_element *ntfs_rl_punch_hole(struct runlist_element *dst_rl, int d
 	    !ntfs_rle_contain(e_rl, end_vcn))
 		return ERR_PTR(-EINVAL);
 
-	end_split = e_rl->vcn + e_rl->length - 1 != end_vcn ? true : false;
+	end_split = e_rl->vcn + e_rl->length - 1 != end_vcn;
 
 	/* @s_rl has to be split into left, punched hole, and right */
-	one_split_3 = e_rl == s_rl && begin_split && end_split ? true : false;
+	one_split_3 = e_rl == s_rl && begin_split && end_split;
 
 	punch_cnt = (int)(e_rl - s_rl) + 1;
 
@@ -1968,7 +1976,7 @@ struct runlist_element *ntfs_rl_collapse_range(struct runlist_element *dst_rl, i
 	    !ntfs_rle_contain(s_rl, start_vcn))
 		return ERR_PTR(-EINVAL);
 
-	begin_split = s_rl->vcn != start_vcn ? true : false;
+	begin_split = s_rl->vcn != start_vcn;
 
 	e_rl = ntfs_rl_find_vcn_nolock(dst_rl, end_vcn);
 	if (!e_rl ||
@@ -1976,10 +1984,10 @@ struct runlist_element *ntfs_rl_collapse_range(struct runlist_element *dst_rl, i
 	    !ntfs_rle_contain(e_rl, end_vcn))
 		return ERR_PTR(-EINVAL);
 
-	end_split = e_rl->vcn + e_rl->length - 1 != end_vcn ? true : false;
+	end_split = e_rl->vcn + e_rl->length - 1 != end_vcn;
 
 	/* @s_rl has to be split into left, collapsed, and right */
-	one_split_3 = e_rl == s_rl && begin_split && end_split ? true : false;
+	one_split_3 = e_rl == s_rl && begin_split && end_split;
 
 	punch_cnt = (int)(e_rl - s_rl) + 1;
 	*punch_rl = kvcalloc(punch_cnt + 1, sizeof(struct runlist_element),

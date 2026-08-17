@@ -45,9 +45,7 @@
 	clk_src->base.ctx
 
 #define DC_LOGGER \
-	calc_pll_cs->ctx->logger
-#define DC_LOGGER_INIT() \
-	struct calc_pll_clock_source *calc_pll_cs = &clk_src->calc_pll
+	CTX->logger
 
 #undef FN
 #define FN(reg_name, field_name) \
@@ -162,11 +160,9 @@ static bool calculate_fb_and_fractional_fb_divider(
 	feedback_divider *= (uint64_t)
 			(calc_pll_cs->fract_fb_divider_precision_factor);
 
-	*feedback_divider_param =
-		div_u64_rem(
-			feedback_divider,
-			calc_pll_cs->fract_fb_divider_factor,
-			fract_feedback_divider_param);
+	*feedback_divider_param = (uint32_t)div_u64_rem(
+		feedback_divider, calc_pll_cs->fract_fb_divider_factor,
+		fract_feedback_divider_param);
 
 	if (*feedback_divider_param != 0)
 		return true;
@@ -240,7 +236,7 @@ static bool calc_fb_divider_checking_tolerance(
 		pll_settings->calculated_pix_clk_100hz =
 			actual_calculated_clock_100hz;
 		pll_settings->vco_freq =
-			div_u64((u64)actual_calculated_clock_100hz * post_divider, 10);
+			(uint32_t)div_u64((u64)actual_calculated_clock_100hz * post_divider, 10);
 		return true;
 	}
 	return false;
@@ -289,6 +285,7 @@ static bool calc_pll_dividers_in_range(
 }
 
 static uint32_t calculate_pixel_clock_pll_dividers(
+		struct dce110_clk_src *clk_src,
 		struct calc_pll_clock_source *calc_pll_cs,
 		struct pll_settings *pll_settings)
 {
@@ -440,8 +437,7 @@ static bool pll_adjust_pix_clk(
 	bp_adjust_pixel_clock_params.
 		encoder_object_id = pix_clk_params->encoder_object_id;
 	bp_adjust_pixel_clock_params.signal_type = pix_clk_params->signal_type;
-	bp_adjust_pixel_clock_params.
-		ss_enable = pix_clk_params->flags.ENABLE_SS;
+	bp_adjust_pixel_clock_params.ss_enable = pix_clk_params->flags.ENABLE_SS != 0;
 	bp_result = clk_src->bios->funcs->adjust_pixel_clock(
 			clk_src->bios, &bp_adjust_pixel_clock_params);
 	if (bp_result == BP_RESULT_OK) {
@@ -477,7 +473,7 @@ static uint32_t dce110_get_pix_clk_dividers_helper (
 {
 	uint32_t field = 0;
 	uint32_t pll_calc_error = MAX_PLL_CALC_ERROR;
-	DC_LOGGER_INIT();
+
 	/* Check if reference clock is external (not pcie/xtalin)
 	* HW Dce80 spec:
 	* 00 - PCIE_REFCLK, 01 - XTALIN,    02 - GENERICA,    03 - GENERICB
@@ -520,12 +516,14 @@ static uint32_t dce110_get_pix_clk_dividers_helper (
 		/*Calculate Dividers by HDMI object, no SS case or SS case */
 		pll_calc_error =
 			calculate_pixel_clock_pll_dividers(
+				        clk_src,
 					&clk_src->calc_pll_hdmi,
 					pll_settings);
 	else
 		/*Calculate Dividers by default object, no SS case or SS case */
 		pll_calc_error =
 			calculate_pixel_clock_pll_dividers(
+					clk_src,
 					&clk_src->calc_pll,
 					pll_settings);
 
@@ -571,7 +569,6 @@ static uint32_t dce110_get_pix_clk_dividers(
 {
 	struct dce110_clk_src *clk_src = TO_DCE110_CLK_SRC(cs);
 	uint32_t pll_calc_error = MAX_PLL_CALC_ERROR;
-	DC_LOGGER_INIT();
 
 	if (pix_clk_params == NULL || pll_settings == NULL
 			|| pix_clk_params->requested_pix_clk_100hz == 0) {
@@ -603,7 +600,6 @@ static uint32_t dce112_get_pix_clk_dividers(
 		struct pll_settings *pll_settings)
 {
 	struct dce110_clk_src *clk_src = TO_DCE110_CLK_SRC(cs);
-	DC_LOGGER_INIT();
 
 	if (pix_clk_params == NULL || pll_settings == NULL
 			|| pix_clk_params->requested_pix_clk_100hz == 0) {
@@ -958,7 +954,7 @@ static bool dce112_program_pix_clk(
 		dce112_program_pixel_clk_resync(clk_src,
 					pix_clk_params->signal_type,
 					pix_clk_params->color_depth,
-					pix_clk_params->flags.SUPPORT_YCBCR420);
+					pix_clk_params->flags.SUPPORT_YCBCR420 != 0);
 
 	return true;
 }
@@ -984,7 +980,9 @@ static bool dcn31_program_pix_clk(
 		dp_dto_ref_khz = clock_source->ctx->dc->clk_mgr->dp_dto_source_clock_in_khz;
 
 	// For these signal types Driver to program DP_DTO without calling VBIOS Command table
-	if (dc_is_dp_signal(pix_clk_params->signal_type) || dc_is_virtual_signal(pix_clk_params->signal_type)) {
+	if (dc_is_hdmi_frl_signal(pix_clk_params->signal_type) ||
+			dc_is_virtual_signal(pix_clk_params->signal_type) ||
+			dc_is_dp_signal(pix_clk_params->signal_type)) {
 		if (e) {
 			/* Set DTO values: phase = target clock, modulo = reference clock*/
 			REG_WRITE(PHASE[inst], e->target_pixel_rate_khz * e->mult_factor);
@@ -999,6 +997,10 @@ static bool dcn31_program_pix_clk(
 			if (encoding == DP_128b_132b_ENCODING)
 				REG_UPDATE_2(PIXEL_RATE_CNTL[inst],
 						DP_DTO0_ENABLE, 1,
+						PIPE0_DTO_SRC_SEL, 2);
+			else if (dc_is_hdmi_frl_signal(pix_clk_params->signal_type) || encoding == DP_128b_132b_ENCODING)
+				REG_UPDATE_2(PIXEL_RATE_CNTL[inst],
+						DP_DTO0_ENABLE, 0,
 						PIPE0_DTO_SRC_SEL, 2);
 			else
 				REG_UPDATE_2(PIXEL_RATE_CNTL[inst],
@@ -1059,7 +1061,7 @@ static bool dcn31_program_pix_clk(
 			dce112_program_pixel_clk_resync(clk_src,
 						pix_clk_params->signal_type,
 						pix_clk_params->color_depth,
-						pix_clk_params->flags.SUPPORT_YCBCR420);
+						pix_clk_params->flags.SUPPORT_YCBCR420 != 0);
 	}
 
 	return true;
@@ -1087,8 +1089,14 @@ static bool dcn401_program_pix_clk(
 	if (!dc_is_tmds_signal(pix_clk_params->signal_type)) {
 		long long dtbclk_p_src_clk_khz;
 
-		dtbclk_p_src_clk_khz = clock_source->ctx->dc->clk_mgr->dprefclk_khz;
-		dto_params.clk_src = DPREFCLK;
+		/* if signal is HDMI FRL dtbclk_p_src is DTBCLK else DPREFCLK */
+		if (dc_is_hdmi_frl_signal(pix_clk_params->signal_type)) {
+			dtbclk_p_src_clk_khz = clock_source->ctx->dc->clk_mgr->funcs->get_dtb_ref_clk_frequency(clock_source->ctx->dc->clk_mgr);
+			dto_params.clk_src = DTBCLK0;
+		} else {
+			dtbclk_p_src_clk_khz = clock_source->ctx->dc->clk_mgr->dprefclk_khz;
+			dto_params.clk_src = DPREFCLK;
+		}
 
 		if (e) {
 			dto_params.pixclk_hz = e->target_pixel_rate_khz;
@@ -1106,7 +1114,15 @@ static bool dcn401_program_pix_clk(
 		clock_source->ctx->dc->res_pool->dccg->funcs->set_dp_dto(
 				clock_source->ctx->dc->res_pool->dccg,
 				&dto_params);
-
+		if (clock_source->ctx->dc->caps.is_apu &&
+			pix_clk_params->requested_pix_clk_100hz &&
+			dc_is_hdmi_frl_signal(pix_clk_params->signal_type)) {
+			/*need hdmistreamclk before vpg block register access*/
+			clock_source->ctx->dc->res_pool->dccg->funcs->set_hdmistreamclk(
+				clock_source->ctx->dc->res_pool->dccg,
+				DTBCLK0,
+				pix_clk_params->controller_id - 1);
+		}
 	} else {
 		if (pll_settings->actual_pix_clk_100hz > 6000000UL)
 			return false;
@@ -1162,7 +1178,7 @@ static bool dcn401_program_pix_clk(
 			dce112_program_pixel_clk_resync(clk_src,
 						pix_clk_params->signal_type,
 						pix_clk_params->color_depth,
-						pix_clk_params->flags.SUPPORT_YCBCR420);
+						pix_clk_params->flags.SUPPORT_YCBCR420 != 0);
 	}
 
 	return true;
@@ -1191,15 +1207,16 @@ static bool dce110_clock_source_power_down(
 	return bp_result == BP_RESULT_OK;
 }
 
-static bool get_pixel_clk_frequency_100hz(
+static bool get_dp_dto_frequency_100hz(
 		const struct clock_source *clock_source,
 		unsigned int inst,
-		unsigned int *pixel_clk_khz)
+		unsigned int *pixel_clk_100hz)
 {
 	struct dce110_clk_src *clk_src = TO_DCE110_CLK_SRC(clock_source);
 	unsigned int clock_hz = 0;
 	unsigned int modulo_hz = 0;
 	unsigned int dp_dto_ref_khz = clock_source->ctx->dc->clk_mgr->dprefclk_khz;
+	unsigned long long temp = 0;
 
 	if (clock_source->id == CLOCK_SOURCE_ID_DP_DTO) {
 		clock_hz = REG_READ(PHASE[inst]);
@@ -1210,19 +1227,71 @@ static bool get_pixel_clk_frequency_100hz(
 			 * not be programmed equal to DPREFCLK
 			 */
 			modulo_hz = REG_READ(MODULO[inst]);
-			if (modulo_hz)
-				*pixel_clk_khz = div_u64((uint64_t)clock_hz*
-					dp_dto_ref_khz*10,
-					modulo_hz);
-			else
-				*pixel_clk_khz = 0;
+			if (modulo_hz) {
+				temp = clock_hz * dp_dto_ref_khz * 10;
+				ASSERT(temp <= UINT_MAX * modulo_hz * 100ULL);
+				*pixel_clk_100hz = div_u64(temp, modulo_hz * 100);
+			} else
+				*pixel_clk_100hz = 0;
 		} else {
 			/* NOTE: There is agreement with VBIOS here that MODULO is
 			 * programmed equal to DPREFCLK, in which case PHASE will be
 			 * equivalent to pixel clock.
 			 */
-			*pixel_clk_khz = clock_hz / 100;
+			*pixel_clk_100hz = clock_hz / 100;
 		}
+		return true;
+	}
+
+	return false;
+}
+
+static bool dcn401_get_dp_dto_frequency_100hz(const struct clock_source *clock_source, unsigned int inst,
+					      unsigned int *pixel_clk_100hz)
+{
+	struct dce110_clk_src *clk_src = TO_DCE110_CLK_SRC(clock_source);
+	unsigned int phase_hz = 0;
+	unsigned int modulo_hz = 0;
+	unsigned int dp_dto_integer = 0;
+	unsigned long long temp = 0;
+
+	if (clock_source->id == CLOCK_SOURCE_ID_DP_DTO) {
+		phase_hz = REG_READ(PHASE[inst]);
+		modulo_hz = REG_READ(MODULO[inst]);
+
+		switch (inst) {
+		case 0:
+			REG_GET(OTG_PIXEL_RATE_DIV, DPDTO0_INT, &dp_dto_integer);
+			break;
+		case 1:
+			REG_GET(OTG_PIXEL_RATE_DIV, DPDTO1_INT, &dp_dto_integer);
+			break;
+		case 2:
+			REG_GET(OTG_PIXEL_RATE_DIV, DPDTO2_INT, &dp_dto_integer);
+			break;
+		case 3:
+			REG_GET(OTG_PIXEL_RATE_DIV, DPDTO3_INT, &dp_dto_integer);
+			break;
+		default:
+			BREAK_TO_DEBUGGER();
+			break;
+		}
+
+		/* On DCN4x, the DCCG DPDTO is directly programmed with the required pixel clock as per the following formula:
+		 *     - DPDTO INTEGER = INT(4:4:4 pixel rate / DTBCLK_P rate)
+		 *     - DPDTO PHASE = 4:4:4 pixel rate – DPDTO INTEGER * DTBCLK_P rate
+		 *     - DPDTO MODULO = DTBCLK_P rate
+		 *     - target pix_clk_hz = (DPDTO INTEGER * DPDTO MODULO + DPDTO PHASE)
+		 */
+		temp = (unsigned long long)dp_dto_integer * modulo_hz + phase_hz;
+		if (temp > (UINT_MAX * 100ULL)) {
+			/* pixel rate 100hz should never be this high, if it is, throw an assert and return 0  */
+			BREAK_TO_DEBUGGER();
+			*pixel_clk_100hz = 0;
+		} else {
+			*pixel_clk_100hz = div_u64(temp, 100);
+		}
+
 		return true;
 	}
 
@@ -1322,7 +1391,7 @@ static const struct clock_source_funcs dcn20_clk_src_funcs = {
 	.cs_power_down = dce110_clock_source_power_down,
 	.program_pix_clk = dcn20_program_pix_clk,
 	.get_pix_clk_dividers = dce112_get_pix_clk_dividers,
-	.get_pixel_clk_frequency_100hz = get_pixel_clk_frequency_100hz,
+	.get_dp_dto_frequency_100hz = get_dp_dto_frequency_100hz,
 	.override_dp_pix_clk = dcn20_override_dp_pix_clk
 };
 
@@ -1339,7 +1408,7 @@ static bool dcn3_program_pix_clk(
 			look_up_in_video_optimized_rate_tlb(pix_clk_params->requested_pix_clk_100hz / 10);
 
 	// For these signal types Driver to program DP_DTO without calling VBIOS Command table
-	if (dc_is_dp_signal(pix_clk_params->signal_type)) {
+	if ((pix_clk_params->signal_type == SIGNAL_TYPE_HDMI_FRL) || dc_is_dp_signal(pix_clk_params->signal_type)) {
 		if (e) {
 			/* Set DTO values: phase = target clock, modulo = reference clock*/
 			REG_WRITE(PHASE[inst], e->target_pixel_rate_khz * e->mult_factor);
@@ -1371,8 +1440,6 @@ static uint32_t dcn3_get_pix_clk_dividers(
 {
 	unsigned long long actual_pix_clk_100Hz = pix_clk_params ? pix_clk_params->requested_pix_clk_100hz : 0;
 	struct dce110_clk_src *clk_src = TO_DCE110_CLK_SRC(cs);
-
-	DC_LOGGER_INIT();
 
 	if (pix_clk_params == NULL || pll_settings == NULL
 			|| pix_clk_params->requested_pix_clk_100hz == 0) {
@@ -1409,21 +1476,21 @@ static const struct clock_source_funcs dcn3_clk_src_funcs = {
 	.cs_power_down = dce110_clock_source_power_down,
 	.program_pix_clk = dcn3_program_pix_clk,
 	.get_pix_clk_dividers = dcn3_get_pix_clk_dividers,
-	.get_pixel_clk_frequency_100hz = get_pixel_clk_frequency_100hz
+	.get_dp_dto_frequency_100hz = get_dp_dto_frequency_100hz
 };
 
 static const struct clock_source_funcs dcn31_clk_src_funcs = {
 	.cs_power_down = dce110_clock_source_power_down,
 	.program_pix_clk = dcn31_program_pix_clk,
 	.get_pix_clk_dividers = dcn3_get_pix_clk_dividers,
-	.get_pixel_clk_frequency_100hz = get_pixel_clk_frequency_100hz
+	.get_dp_dto_frequency_100hz = get_dp_dto_frequency_100hz
 };
 
 static const struct clock_source_funcs dcn401_clk_src_funcs = {
 	.cs_power_down = dce110_clock_source_power_down,
 	.program_pix_clk = dcn401_program_pix_clk,
 	.get_pix_clk_dividers = dcn3_get_pix_clk_dividers,
-	.get_pixel_clk_frequency_100hz = get_pixel_clk_frequency_100hz
+	.get_dp_dto_frequency_100hz = dcn401_get_dp_dto_frequency_100hz
 };
 
 /*****************************************/
@@ -1434,15 +1501,14 @@ static const struct clock_source_funcs dce112_clk_src_funcs = {
 	.cs_power_down = dce110_clock_source_power_down,
 	.program_pix_clk = dce112_program_pix_clk,
 	.get_pix_clk_dividers = dce112_get_pix_clk_dividers,
-	.get_pixel_clk_frequency_100hz = get_pixel_clk_frequency_100hz
+	.get_dp_dto_frequency_100hz = get_dp_dto_frequency_100hz
 };
 static const struct clock_source_funcs dce110_clk_src_funcs = {
 	.cs_power_down = dce110_clock_source_power_down,
 	.program_pix_clk = dce110_program_pix_clk,
 	.get_pix_clk_dividers = dce110_get_pix_clk_dividers,
-	.get_pixel_clk_frequency_100hz = get_pixel_clk_frequency_100hz
+	.get_dp_dto_frequency_100hz = get_dp_dto_frequency_100hz
 };
-
 
 static void get_ss_info_from_atombios(
 		struct dce110_clk_src *clk_src,
@@ -1456,7 +1522,7 @@ static void get_ss_info_from_atombios(
 	struct spread_spectrum_info *ss_info_cur;
 	struct spread_spectrum_data *ss_data_cur;
 	uint32_t i;
-	DC_LOGGER_INIT();
+
 	if (ss_entries_num == NULL) {
 		DC_LOG_SYNC(
 			"Invalid entry !!!\n");
@@ -1587,6 +1653,7 @@ static void ss_info_from_atombios_create(
 }
 
 static bool calc_pll_max_vco_construct(
+			struct dce110_clk_src *clk_src,
 			struct calc_pll_clock_source *calc_pll_cs,
 			struct calc_pll_clock_source_init_data *init_data)
 {
@@ -1738,6 +1805,7 @@ bool dce110_clk_src_construct(
 	ss_info_from_atombios_create(clk_src);
 
 	if (!calc_pll_max_vco_construct(
+			clk_src,
 			&clk_src->calc_pll,
 			&calc_pll_cs_init_data)) {
 		ASSERT_CRITICAL(false);
@@ -1752,7 +1820,7 @@ bool dce110_clk_src_construct(
 
 
 	if (!calc_pll_max_vco_construct(
-			&clk_src->calc_pll_hdmi, &calc_pll_cs_init_data_hdmi)) {
+			clk_src, &clk_src->calc_pll_hdmi, &calc_pll_cs_init_data_hdmi)) {
 		ASSERT_CRITICAL(false);
 		goto unexpected_failure;
 	}

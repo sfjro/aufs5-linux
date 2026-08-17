@@ -2154,12 +2154,13 @@ static int vega20_get_gpu_power(struct pp_hwmgr *hwmgr, int idx,
 	switch (idx) {
 	case AMDGPU_PP_SENSOR_GPU_AVG_POWER:
 		if (hwmgr->smu_version == 0x282e00)
-			*query = metrics_table.AverageSocketPower << 8;
+			*query = metrics_table.AverageSocketPower *
+				 MILLIWATT_PER_WATT;
 		else
 			ret = -EOPNOTSUPP;
 		break;
 	case AMDGPU_PP_SENSOR_GPU_INPUT_POWER:
-		*query = metrics_table.CurrSocketPower << 8;
+		*query = metrics_table.CurrSocketPower * MILLIWATT_PER_WATT;
 		break;
 	}
 
@@ -2795,22 +2796,6 @@ static void vega20_set_fan_control_mode(struct pp_hwmgr *hwmgr, uint32_t mode)
 		break;
 	}
 }
-
-static int vega20_get_dal_power_level(struct pp_hwmgr *hwmgr,
-		struct amd_pp_simple_clock_info *info)
-{
-#if 0
-	struct phm_ppt_v2_information *table_info =
-			(struct phm_ppt_v2_information *)hwmgr->pptable;
-	struct phm_clock_and_voltage_limits *max_limits =
-			&table_info->max_clock_voltage_on_ac;
-
-	info->engine_max_clock = max_limits->sclk;
-	info->memory_max_clock = max_limits->mclk;
-#endif
-	return 0;
-}
-
 
 static int vega20_get_sclks(struct pp_hwmgr *hwmgr,
 		struct pp_clock_levels_with_latency *clocks)
@@ -4446,7 +4431,6 @@ static const struct pp_hwmgr_func vega20_hwmgr_funcs = {
 	/* export to DAL */
 	.get_sclk = vega20_dpm_get_sclk,
 	.get_mclk = vega20_dpm_get_mclk,
-	.get_dal_power_level = vega20_get_dal_power_level,
 	.get_clock_by_type_with_latency = vega20_get_clock_by_type_with_latency,
 	.get_clock_by_type_with_voltage = vega20_get_clock_by_type_with_voltage,
 	.set_watermarks_for_clocks_ranges = vega20_set_watermarks_for_clocks_ranges,

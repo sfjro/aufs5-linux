@@ -388,11 +388,13 @@ static inline void cdns_spi_writer(struct cdns_spi *xspi)
 
 /**
  * cdns_spi_process_fifo - Fills the TX FIFO, and drain the RX FIFO
+ * @ctlr:	Pointer to the spi_controller structure
  * @xspi:	Pointer to the cdns_spi structure
  * @ntx:	Number of bytes to pack into the TX FIFO
  * @nrx:	Number of bytes to drain from the RX FIFO
  */
-static void cdns_spi_process_fifo(struct cdns_spi *xspi, int ntx, int nrx)
+static void cdns_spi_process_fifo(struct spi_controller *ctlr,
+				  struct cdns_spi *xspi, int ntx, int nrx)
 {
 	ntx = clamp(ntx, 0, xspi->tx_bytes);
 	nrx = clamp(nrx, 0, xspi->rx_bytes);
@@ -407,6 +409,16 @@ static void cdns_spi_process_fifo(struct cdns_spi *xspi, int ntx, int nrx)
 		}
 
 		if (ntx) {
+			/* When xspi in busy condition, bytes may send failed,
+			 * then spi control didn't work thoroughly, add one byte
+			 * delay. Only in host mode; in target mode this delay
+			 * causes data corruption as the target fails to prepare
+			 * data in time.
+			 */
+			if (!spi_controller_is_target(ctlr) &&
+			    (cdns_spi_read(xspi, CDNS_SPI_ISR) & CDNS_SPI_IXR_TXFULL))
+				udelay(10);
+
 			cdns_spi_writer(xspi);
 			ntx--;
 		}
@@ -460,14 +472,14 @@ static irqreturn_t cdns_spi_irq(int irq, void *dev_id)
 			cdns_spi_write(xspi, CDNS_SPI_THLD, 1);
 
 		if (xspi->tx_bytes) {
-			cdns_spi_process_fifo(xspi, trans_cnt, trans_cnt);
+			cdns_spi_process_fifo(ctlr, xspi, trans_cnt, trans_cnt);
 		} else {
 			/* Fixed delay due to controller limitation with
 			 * RX_NEMPTY incorrect status
 			 * Xilinx AR:65885 contains more details
 			 */
 			udelay(10);
-			cdns_spi_process_fifo(xspi, 0, trans_cnt);
+			cdns_spi_process_fifo(ctlr, xspi, 0, trans_cnt);
 			cdns_spi_write(xspi, CDNS_SPI_IDR,
 				       CDNS_SPI_IXR_DEFAULT);
 			spi_finalize_current_transfer(ctlr);
@@ -520,17 +532,11 @@ static int cdns_transfer_one(struct spi_controller *ctlr,
 			cdns_spi_write(xspi, CDNS_SPI_THLD, xspi->tx_fifo_depth >> 1);
 	}
 
-	/* When xspi in busy condition, bytes may send failed,
-	 * then spi control didn't work thoroughly, add one byte delay
-	 */
-	if (cdns_spi_read(xspi, CDNS_SPI_ISR) & CDNS_SPI_IXR_TXFULL)
-		udelay(10);
-
 	xspi->n_bytes = cdns_spi_n_bytes(transfer);
 	xspi->tx_bytes = DIV_ROUND_UP(xspi->tx_bytes, xspi->n_bytes);
 	xspi->rx_bytes = DIV_ROUND_UP(xspi->rx_bytes, xspi->n_bytes);
 
-	cdns_spi_process_fifo(xspi, xspi->tx_fifo_depth, 0);
+	cdns_spi_process_fifo(ctlr, xspi, xspi->tx_fifo_depth, 0);
 
 	cdns_spi_write(xspi, CDNS_SPI_IER, CDNS_SPI_IXR_DEFAULT);
 	return transfer->len;
@@ -635,7 +641,7 @@ static int cdns_target_abort(struct spi_controller *ctlr)
  */
 static int cdns_spi_probe(struct platform_device *pdev)
 {
-	int ret = 0, irq;
+	int ret, irq;
 	struct spi_controller *ctlr;
 	struct cdns_spi *xspi;
 	u32 num_cs;
@@ -643,9 +649,9 @@ static int cdns_spi_probe(struct platform_device *pdev)
 
 	target = of_property_read_bool(pdev->dev.of_node, "spi-slave");
 	if (target)
-		ctlr = spi_alloc_target(&pdev->dev, sizeof(*xspi));
+		ctlr = devm_spi_alloc_target(&pdev->dev, sizeof(*xspi));
 	else
-		ctlr = spi_alloc_host(&pdev->dev, sizeof(*xspi));
+		ctlr = devm_spi_alloc_host(&pdev->dev, sizeof(*xspi));
 
 	if (!ctlr)
 		return -ENOMEM;
@@ -654,23 +660,19 @@ static int cdns_spi_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, ctlr);
 
 	xspi->regs = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(xspi->regs)) {
-		ret = PTR_ERR(xspi->regs);
-		goto remove_ctlr;
-	}
+	if (IS_ERR(xspi->regs))
+		return PTR_ERR(xspi->regs);
 
 	xspi->pclk = devm_clk_get_enabled(&pdev->dev, "pclk");
 	if (IS_ERR(xspi->pclk)) {
 		dev_err(&pdev->dev, "pclk clock not found.\n");
-		ret = PTR_ERR(xspi->pclk);
-		goto remove_ctlr;
+		return PTR_ERR(xspi->pclk);
 	}
 
 	xspi->rstc = devm_reset_control_get_optional_exclusive(&pdev->dev, "spi");
 	if (IS_ERR(xspi->rstc)) {
-		ret = dev_err_probe(&pdev->dev, PTR_ERR(xspi->rstc),
-				    "Cannot get SPI reset.\n");
-		goto remove_ctlr;
+		return dev_err_probe(&pdev->dev, PTR_ERR(xspi->rstc),
+				     "Cannot get SPI reset.\n");
 	}
 
 	reset_control_assert(xspi->rstc);
@@ -679,8 +681,7 @@ static int cdns_spi_probe(struct platform_device *pdev)
 	xspi->ref_clk = devm_clk_get_enabled(&pdev->dev, "ref_clk");
 	if (IS_ERR(xspi->ref_clk)) {
 		dev_err(&pdev->dev, "ref_clk clock not found.\n");
-		ret = PTR_ERR(xspi->ref_clk);
-		goto remove_ctlr;
+		return PTR_ERR(xspi->ref_clk);
 	}
 
 	if (!spi_controller_is_target(ctlr)) {
@@ -710,7 +711,7 @@ static int cdns_spi_probe(struct platform_device *pdev)
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0) {
 		ret = irq;
-		goto clk_dis_all;
+		goto err_disable_rpm;
 	}
 
 	ret = devm_request_irq(&pdev->dev, irq, cdns_spi_irq,
@@ -718,7 +719,7 @@ static int cdns_spi_probe(struct platform_device *pdev)
 	if (ret != 0) {
 		ret = -ENXIO;
 		dev_err(&pdev->dev, "request_irq failed\n");
-		goto clk_dis_all;
+		goto err_disable_rpm;
 	}
 
 	ctlr->use_gpio_descriptors = true;
@@ -748,23 +749,22 @@ static int cdns_spi_probe(struct platform_device *pdev)
 	ret = spi_register_controller(ctlr);
 	if (ret) {
 		dev_err(&pdev->dev, "spi_register_controller failed\n");
-		goto clk_dis_all;
+		goto err_disable_rpm;
 	}
 
 	if (!spi_controller_is_target(ctlr))
 		pm_runtime_put_autosuspend(&pdev->dev);
 
-	return ret;
+	return 0;
 
-clk_dis_all:
+err_disable_rpm:
 	if (!spi_controller_is_target(ctlr)) {
 		pm_runtime_disable(&pdev->dev);
 		pm_runtime_set_suspended(&pdev->dev);
 		pm_runtime_put_noidle(&pdev->dev);
 		pm_runtime_dont_use_autosuspend(&pdev->dev);
 	}
-remove_ctlr:
-	spi_controller_put(ctlr);
+
 	return ret;
 }
 
@@ -785,8 +785,6 @@ static void cdns_spi_remove(struct platform_device *pdev)
 	if (!spi_controller_is_target(ctlr))
 		ret = pm_runtime_get_sync(&pdev->dev);
 
-	spi_controller_get(ctlr);
-
 	spi_unregister_controller(ctlr);
 
 	if (ret >= 0)
@@ -798,8 +796,6 @@ static void cdns_spi_remove(struct platform_device *pdev)
 		pm_runtime_put_noidle(&pdev->dev);
 		pm_runtime_dont_use_autosuspend(&pdev->dev);
 	}
-
-	spi_controller_put(ctlr);
 }
 
 /**

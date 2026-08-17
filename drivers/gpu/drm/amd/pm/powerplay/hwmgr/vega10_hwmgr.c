@@ -814,9 +814,6 @@ static int vega10_set_private_data_based_on_pptable(struct pp_hwmgr *hwmgr)
 
 static int vega10_hwmgr_backend_fini(struct pp_hwmgr *hwmgr)
 {
-	kfree(hwmgr->dyn_state.vddc_dep_on_dal_pwrl);
-	hwmgr->dyn_state.vddc_dep_on_dal_pwrl = NULL;
-
 	kfree(hwmgr->backend);
 	hwmgr->backend = NULL;
 
@@ -3937,8 +3934,8 @@ static int vega10_get_gpu_power(struct pp_hwmgr *hwmgr,
 	if (ret)
 		return ret;
 
-	/* SMC returning actual watts, keep consistent with legacy asics, low 8 bit as 8 fractional bits */
-	*query = value << 8;
+	/* SMC returns whole Watts, while power sensors use milliwatts. */
+	*query = value * MILLIWATT_PER_WATT;
 
 	return 0;
 }
@@ -4384,20 +4381,6 @@ static uint32_t vega10_get_fan_control_mode(struct pp_hwmgr *hwmgr)
 		return AMD_FAN_CTRL_MANUAL;
 	else
 		return AMD_FAN_CTRL_AUTO;
-}
-
-static int vega10_get_dal_power_level(struct pp_hwmgr *hwmgr,
-		struct amd_pp_simple_clock_info *info)
-{
-	struct phm_ppt_v2_information *table_info =
-			(struct phm_ppt_v2_information *)hwmgr->pptable;
-	struct phm_clock_and_voltage_limits *max_limits =
-			&table_info->max_clock_voltage_on_ac;
-
-	info->engine_max_clock = max_limits->sclk;
-	info->memory_max_clock = max_limits->mclk;
-
-	return 0;
 }
 
 static void vega10_get_sclks(struct pp_hwmgr *hwmgr,
@@ -5644,7 +5627,6 @@ static const struct pp_hwmgr_func vega10_hwmgr_funcs = {
 	.set_fan_control_mode = vega10_set_fan_control_mode,
 	.get_fan_control_mode = vega10_get_fan_control_mode,
 	.read_sensor = vega10_read_sensor,
-	.get_dal_power_level = vega10_get_dal_power_level,
 	.get_clock_by_type_with_latency = vega10_get_clock_by_type_with_latency,
 	.get_clock_by_type_with_voltage = vega10_get_clock_by_type_with_voltage,
 	.set_watermarks_for_clocks_ranges = vega10_set_watermarks_for_clocks_ranges,

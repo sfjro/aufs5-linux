@@ -1987,8 +1987,9 @@ static int max98095_probe(struct snd_soc_component *component)
 	int ret = 0;
 
 	max98095->mclk = devm_clk_get(component->dev, "mclk");
-	if (PTR_ERR(max98095->mclk) == -EPROBE_DEFER)
-		return -EPROBE_DEFER;
+	if (IS_ERR(max98095->mclk))
+		if (PTR_ERR(max98095->mclk) == -EPROBE_DEFER)
+			return -EPROBE_DEFER;
 
 	/* reset the codec, the DSP core, and disable all interrupts */
 	max98095_reset(component);
@@ -2109,7 +2110,7 @@ static const struct snd_soc_component_driver soc_component_dev_max98095 = {
 };
 
 static const struct i2c_device_id max98095_i2c_id[] = {
-	{ "max98095", MAX98095 },
+	{ .name = "max98095", .driver_data = MAX98095 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, max98095_i2c_id);

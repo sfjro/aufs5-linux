@@ -290,19 +290,32 @@ static inline void cppc_freq_invariance_exit(void)
 }
 #endif /* CONFIG_ACPI_CPPC_CPUFREQ_FIE */
 
+static void cppc_cpufreq_get_perf_limits(struct cppc_cpudata *cpu_data,
+					 struct cpufreq_policy *policy,
+					 u32 *min_perf, u32 *max_perf)
+{
+	struct cppc_perf_caps *caps = &cpu_data->perf_caps;
+	unsigned int min_freq, max_freq;
+	u32 min, max;
+
+	min_freq = READ_ONCE(policy->min);
+	max_freq = READ_ONCE(policy->max);
+	if (unlikely(min_freq > max_freq))
+		min_freq = max_freq;
+
+	min = cppc_khz_to_perf(caps, min_freq);
+	max = cppc_khz_to_perf(caps, max_freq);
+
+	*min_perf = clamp_t(u32, min, caps->lowest_perf, caps->highest_perf);
+	*max_perf = clamp_t(u32, max, caps->lowest_perf, caps->highest_perf);
+}
+
 static void cppc_cpufreq_update_perf_limits(struct cppc_cpudata *cpu_data,
 					    struct cpufreq_policy *policy)
 {
-	struct cppc_perf_caps *caps = &cpu_data->perf_caps;
-	u32 min_perf, max_perf;
-
-	min_perf = cppc_khz_to_perf(caps, policy->min);
-	max_perf = cppc_khz_to_perf(caps, policy->max);
-
-	cpu_data->perf_ctrls.min_perf =
-		clamp_t(u32, min_perf, caps->lowest_perf, caps->highest_perf);
-	cpu_data->perf_ctrls.max_perf =
-		clamp_t(u32, max_perf, caps->lowest_perf, caps->highest_perf);
+	cppc_cpufreq_get_perf_limits(cpu_data, policy,
+				     &cpu_data->perf_ctrls.min_perf,
+				     &cpu_data->perf_ctrls.max_perf);
 }
 
 static int cppc_cpufreq_set_target(struct cpufreq_policy *policy,
@@ -660,8 +673,6 @@ static int cppc_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	 * Section 8.4.7.1.1.5 of ACPI 6.1 spec)
 	 */
 	policy->min = cppc_perf_to_khz(caps, caps->lowest_nonlinear_perf);
-	policy->max = cppc_perf_to_khz(caps, policy->boost_enabled ?
-						caps->highest_perf : caps->nominal_perf);
 
 	/*
 	 * Set cpuinfo.min_freq to Lowest to make the full range of performance
@@ -669,7 +680,8 @@ static int cppc_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	 * nonlinear perf
 	 */
 	policy->cpuinfo.min_freq = cppc_perf_to_khz(caps, caps->lowest_perf);
-	policy->cpuinfo.max_freq = policy->max;
+	policy->cpuinfo.max_freq = cppc_perf_to_khz(caps, policy->boost_enabled ?
+						    caps->highest_perf : caps->nominal_perf);
 
 	policy->transition_delay_us = cppc_cpufreq_get_transition_delay_us(cpu);
 	policy->shared_type = cpu_data->shared_type;
@@ -694,7 +706,7 @@ static int cppc_cpufreq_cpu_init(struct cpufreq_policy *policy)
 		goto out;
 	}
 
-	policy->fast_switch_possible = cppc_allow_fast_switch();
+	policy->fast_switch_possible = cppc_allow_fast_switch(policy->cpus);
 	policy->dvfs_possible_from_any_cpu = true;
 
 	/*
@@ -982,7 +994,34 @@ store_energy_performance_preference_val(struct cpufreq_policy *policy,
 	return count;
 }
 
-CPPC_CPUFREQ_ATTR_RW_U64(perf_limited, cppc_get_perf_limited,
+static int cppc_get_perf_limited_filtered(int cpu, u64 *perf_limited)
+{
+	struct cpufreq_policy *policy;
+	struct cppc_cpudata *cpu_data;
+	int ret;
+
+	ret = cppc_get_perf_limited(cpu, perf_limited);
+	if (ret)
+		return ret;
+
+	policy = cpufreq_cpu_get_raw(cpu);
+	if (!policy)
+		return -EINVAL;
+
+	cpu_data = policy->driver_data;
+
+	/*
+	 * Desired Excursion is ignored when autonomous selection is
+	 * enabled. Clear the bit to avoid exposing meaningless state
+	 * to userspace.
+	 */
+	if (cpu_data && cpu_data->perf_ctrls.auto_sel)
+		*perf_limited &= ~CPPC_PERF_LIMITED_DESIRED_EXCURSION;
+
+	return 0;
+}
+
+CPPC_CPUFREQ_ATTR_RW_U64(perf_limited, cppc_get_perf_limited_filtered,
 			 cppc_set_perf_limited)
 
 cpufreq_freq_attr_ro(freqdomain_cpus);

@@ -12,10 +12,16 @@
 #include <linux/file.h>
 #include <linux/anon_inodes.h>
 #include <linux/highmem.h>
+#include <linux/moduleparam.h>
 #include <linux/vmalloc.h>
 #include <linux/vdpa.h>
 
 #include "iova_domain.h"
+
+static int max_iotlb_entries = 2048;
+module_param(max_iotlb_entries, int, 0444);
+MODULE_PARM_DESC(max_iotlb_entries,
+		 "Maximum number of iotlb entries. (default: 2048)");
 
 static int vduse_iotlb_add_range(struct vduse_iova_domain *domain,
 				 u64 start, u64 last,
@@ -124,7 +130,7 @@ static int vduse_domain_map_bounce_page(struct vduse_iova_domain *domain,
 		if (!map->bounce_page) {
 			head_map = &domain->bounce_maps[(iova & PAGE_MASK) >> BOUNCE_MAP_SHIFT];
 			if (!head_map->bounce_page) {
-				tmp_page = alloc_page(GFP_ATOMIC);
+				tmp_page = alloc_page(GFP_ATOMIC | __GFP_ZERO);
 				if (!tmp_page)
 					return -ENOMEM;
 				if (cmpxchg(&head_map->bounce_page, NULL, tmp_page))
@@ -622,11 +628,14 @@ vduse_domain_create(unsigned long iova_limit, size_t bounce_size)
 	if (iova_limit <= bounce_size)
 		return NULL;
 
+	if (max_iotlb_entries <= 0)
+		return NULL;
+
 	domain = kzalloc_obj(*domain);
 	if (!domain)
 		return NULL;
 
-	domain->iotlb = vhost_iotlb_alloc(0, 0);
+	domain->iotlb = vhost_iotlb_alloc(max_iotlb_entries, 0);
 	if (!domain->iotlb)
 		goto err_iotlb;
 
