@@ -229,7 +229,7 @@ int aufs_mknod(struct mnt_idmap *idmap, struct inode *dir,
 int aufs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 		 struct dentry *dentry, const char *symname);
 int aufs_create(struct mnt_idmap *idmap, struct inode *dir,
-		struct dentry *dentry, umode_t mode, bool want_excl);
+		struct dentry *dentry, umode_t mode);
 struct vfsub_aopen_args;
 int au_aopen_or_create(struct inode *dir, struct dentry *dentry,
 		       struct vfsub_aopen_args *args);

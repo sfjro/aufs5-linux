@@ -277,8 +277,7 @@ static int au_dr_hino(struct super_block *sb, aufs_bindex_t bindex,
 			}
 			goto out_mnt_write;
 		} else if (!d_is_positive(hinopath.dentry)) {
-			err = vfsub_create(dir, &hinopath, 0600,
-					   /*want_excl*/false);
+			err = vfsub_create(dir, &hinopath, 0600);
 			AuTraceErr(err);
 			if (unlikely(err))
 				goto out_mnt_write;
@@ -620,7 +619,7 @@ static int au_drinfo_do_store(struct au_drinfo_store *w,
 	err = 0;
 	h_dir = d_inode(w->h_ppath.dentry);
 	if (elm && d_is_negative(infopath.dentry)) {
-		err = vfsub_create(h_dir, &infopath, 0600, /*want_excl*/true);
+		err = vfsub_create(h_dir, &infopath, 0600);
 		AuTraceErr(err);
 		if (unlikely(err))
 			goto out_dput;
