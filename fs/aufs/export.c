@@ -291,6 +291,7 @@ out:
 	si_noflush_read_lock(sb);
 	AuDebugOn(!mnt);
 	path_put(&root);
+	AuTraceErrPtr(mnt);
 	return mnt;
 }
 
@@ -433,6 +434,11 @@ static struct dentry *decode_by_dir_ino(struct super_block *sb, ino_t ino,
 		path.dentry = dget(sb->s_root);
 
 	path.mnt = au_mnt_get(sb);
+	if (IS_ERR(path.mnt)) {
+		dentry = ERR_CAST(path.mnt);
+		dput(path.dentry);
+		goto out;
+	}
 	dentry = au_lkup_by_ino(&path, ino, nsi_lock);
 	path_put(&path);
 
@@ -469,6 +475,10 @@ static char *au_build_path(struct dentry *h_parent, struct path *h_rootpath,
 		p += n;
 
 	path.mnt = au_mnt_get(sb);
+	if (IS_ERR(path.mnt)) {
+		p = ERR_CAST(path.mnt);
+		goto out;
+	}
 	path.dentry = sb->s_root;
 	p = d_path(&path, buf, len - strlen(p));
 	mntput(path.mnt);
