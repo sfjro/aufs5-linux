@@ -279,7 +279,7 @@ void vfsub_unlock_rename(struct dentry *d1, struct au_hinode *hdir1,
 
 /* ---------------------------------------------------------------------- */
 
-int vfsub_create(struct inode *dir, struct path *path, int mode, bool want_excl)
+int vfsub_create(struct inode *dir, struct path *path, int mode)
 {
 	int err, e;
 	struct dentry *d;
