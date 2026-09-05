@@ -400,7 +400,7 @@ static int au_wh_init_rw(struct dentry *h_root, struct au_wbr *wbr,
 	h_dir = d_inode(h_root);
 	if (d_is_negative(base[AuBrWh_BASE].dentry)) {
 		h_path->dentry = base[AuBrWh_BASE].dentry;
-		err = vfsub_create(h_dir, h_path, WH_MASK, /*want_excl*/true);
+		err = vfsub_create(h_dir, h_path, WH_MASK);
 	} else if (d_is_reg(base[AuBrWh_BASE].dentry))
 		err = 0;
 	else
@@ -675,7 +675,7 @@ static int link_or_create_wh(struct super_block *sb, aufs_bindex_t bindex,
 	}
 
 	/* return this error in this context */
-	err = vfsub_create(h_dir, &h_path, WH_MASK, /*want_excl*/true);
+	err = vfsub_create(h_dir, &h_path, WH_MASK);
 	if (!err)
 		au_fhsm_wrote(sb, bindex, /*force*/0);
 

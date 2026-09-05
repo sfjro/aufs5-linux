@@ -807,8 +807,6 @@ static int aufs_swap_activate(struct swap_info_struct *sis, struct file *file,
 { AuUnsupport(); return 0; }
 static void aufs_swap_deactivate(struct file *file)
 { AuUnsupport(); }
-static int aufs_swap_rw(struct kiocb *iocb, struct iov_iter *iter)
-{ AuUnsupport(); return 0; }
 #endif /* CONFIG_AUFS_DEBUG */
 
 const struct address_space_operations aufs_aop = {
@@ -829,7 +827,6 @@ const struct address_space_operations aufs_aop = {
 	.is_dirty_writeback	= aufs_is_dirty_writeback,
 	.error_remove_folio	= aufs_error_remove_folio,
 	.swap_activate		= aufs_swap_activate,
-	.swap_deactivate	= aufs_swap_deactivate,
-	.swap_rw		= aufs_swap_rw
+	.swap_deactivate	= aufs_swap_deactivate
 #endif /* CONFIG_AUFS_DEBUG */
 };

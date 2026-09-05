@@ -213,7 +213,6 @@ struct simple_arg {
 	union {
 		struct {
 			umode_t			mode;
-			bool			want_excl;
 			bool			try_aopen;
 			struct vfsub_aopen_args	*aopen;
 		} c;
@@ -284,8 +283,7 @@ static int add_simple(struct inode *dir, struct dentry *dentry,
 	switch (arg->type) {
 	case Creat:
 		if (!try_aopen || !h_dir->i_op->atomic_open) {
-			err = vfsub_create(h_dir, &a->h_path, arg->u.c.mode,
-					   arg->u.c.want_excl);
+			err = vfsub_create(h_dir, &a->h_path, arg->u.c.mode);
 			created = !err;
 			if (!err && try_aopen)
 				aopen->file->f_mode |= FMODE_CREATED;
@@ -375,13 +373,12 @@ int aufs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 }
 
 int aufs_create(struct mnt_idmap *idmap, struct inode *dir,
-		struct dentry *dentry, umode_t mode, bool want_excl)
+		struct dentry *dentry, umode_t mode)
 {
 	struct simple_arg arg = {
 		.type = Creat,
 		.u.c = {
-			.mode		= mode,
-			.want_excl	= want_excl
+			.mode		= mode
 		}
 	};
 	return add_simple(dir, dentry, &arg);
@@ -394,7 +391,6 @@ int au_aopen_or_create(struct inode *dir, struct dentry *dentry,
 		.type = Creat,
 		.u.c = {
 			.mode		= aopen_args->create_mode,
-			.want_excl	= aopen_args->open_flag & O_EXCL,
 			.try_aopen	= true,
 			.aopen		= aopen_args
 		}
